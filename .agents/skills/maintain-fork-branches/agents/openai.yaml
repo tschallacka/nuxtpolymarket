@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain Fork Branches"
+  short_description: "Keep master compatible and main upstream-clean"
+  default_prompt: "Use $maintain-fork-branches to update our fork safely and prepare an upstream-compatible pull request."
