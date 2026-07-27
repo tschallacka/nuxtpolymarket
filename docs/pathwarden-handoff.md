@@ -11,6 +11,32 @@ must agree with what the board communicates, progression must remain clear, and
 screenshots must be rejected for any obvious anchoring, road, fog, or combat
 artifact.
 
+## Room world and active-run persistence
+
+The room-world branch now precomputes the complete Realm map as a versioned,
+seeded plan. Room footprints, road links, terrain features, buildable cells,
+frontiers, enemy routes, and revealed geometry all derive from that plan.
+Runtime expansion only claims existing connections; it does not generate or
+repair geometry.
+
+The room grammar includes compact straights, corners, U-bends, switchbacks,
+T-junctions, crossroads, road islands, bridges, mountain passes, valleys,
+lakeshores, and forest roads. The required main route deliberately introduces
+junction rooms while optional branches persist as additional future routes.
+Room placement is retried as a whole when graph validation fails.
+
+An active run is created when the player calls wave 1. The database stores the
+immutable map plan separately from revisioned engine state, with one active run
+per player. Autosaves use optimistic revisions; a stale tab stops saving after
+a conflict instead of overwriting newer progress. Navigation preserves the
+run, reload restores exact combat and strategic state, and settlement removes
+the active run atomically.
+
+Paid abandonment is available only after a run has started and only in
+strategic phases. The server rejects abandonment during combat, debits Gems or
+the current Coin quote transactionally, removes the active run in the same
+transaction, and refreshes the client session afterward.
+
 ## Work completed
 
 Primary implementation:

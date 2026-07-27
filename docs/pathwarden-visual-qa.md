@@ -24,6 +24,12 @@ Inspect the full canvas at original resolution rather than relying on thumbnails
 - Run with visual guides enabled before every clean capture. The cyan tile anchor,
   amber ground contact, violet weapon pivot, and red muzzle marker must agree with
   the rendered geometry at original resolution.
+- The complete room plan is immutable after initialization. Revealing a room may
+  change selection state only; room footprints, road links, terrain features,
+  and connection geometry must retain the same plan hash.
+- The main twelve-room route must expose compact, readable room transitions and
+  include both T-junction and crossroads grammar. Large empty connector spans
+  or repeated straight-only expansion sequences fail visual inspection.
 - The diagnostic state must report `roadValidation.valid: true`; visual inspection
   cannot override a failed graph invariant.
 - A road is one continuous graph. Internal nodes and junctions cannot show end caps, doubled borders, translucent overlaps, pinches, or exposed grass wedges.
