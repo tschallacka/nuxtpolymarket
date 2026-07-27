@@ -13,10 +13,16 @@ function assertValidName(data: Record<string, unknown>) {
 }
 
 const BASE_URL = process.env.BETTER_AUTH_URL || 'http://localhost:3000'
+const LOCAL_DEV_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3001'
+]
 
 export const auth = betterAuth({
     baseURL: BASE_URL,
-    trustedOrigins: [BASE_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    trustedOrigins: [...new Set([BASE_URL, ...LOCAL_DEV_ORIGINS])],
     database: drizzleAdapter(db, {
         provider: 'pg',
         schema

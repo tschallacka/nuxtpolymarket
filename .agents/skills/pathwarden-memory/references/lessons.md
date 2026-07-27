@@ -234,3 +234,34 @@ Important development bridge actions include road laboratory controls, frontier 
 The worktree is intentionally dirty and Pathwarden is largely untracked. Preserve it.
 
 At skill creation, the latest edit removed the duplicate frontier and fake terminal render calls from `drawRoad()`, added one clipped link into each active choice’s first hidden cell, and excluded frontier nodes from fills. Typecheck passed; focused ESLint and a final multi-seed Playwright audit remained to run.
+
+## 11. Compact room and balance-simulation invariants
+
+- Treat road-room size as a two-dimensional footprint constraint, not only a
+  cell count: maximum axis 8, maximum bounding-box area 36. This permits 8×4
+  and rejects 9×3.
+- A road may end only at the castle or at the last real cell of a validated
+  terminal approach under mist. Never repair a hard cap with renderer-only
+  extrapolation.
+- Terminal approaches must extend at least six cells beyond their port. The
+  room reveal halo reaches two cells past visible roads, so shorter approaches
+  can expose their final butt cap at overview zoom.
+- Preserve split frequency structurally: the depth-13 mandatory route contains
+  six junction rooms, optional frontiers may use Y/T/crossroad grammar, and
+  side branches continue for two to three rooms.
+- Generator version 5 begins with a crossroads immediately beyond the castle
+  and guarantees that the mandatory third reveal is a Y-junction, T-junction,
+  or crossroads.
+- A terminal attacker mouth is not an expansion choice. In debug/visual-guide
+  QA, mark it explicitly as `SPAWN`; normal gameplay rendering should not add a
+  button-like marker over the mouth when the road already reads clearly.
+- Bridge road cells replace the sandy road surface with a dark timber deck and
+  perpendicular plank seams. Do not use crossed diagonal braces over sand.
+- The minimum camera zoom is derived from current revealed bounds. The circular
+  minimap is a close-view aid and should disappear at overview scale.
+- Route-length health scaling must be shared by live combat and any balance
+  simulator. Keep it sub-linear and capped so long roads gain endurance without
+  making extreme generated routes unbounded.
+- Balance simulations stay pure and seeded, reuse live defense blueprints, and
+  report both success and enemy progress. A strategy name describes intent, not
+  a guaranteed outcome: over-saving Aether can still lose early.
