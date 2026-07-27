@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pathwarden Memory"
+  short_description: "Preserve Pathwarden design and QA invariants"
+  default_prompt: "Use $pathwarden-memory to continue Pathwarden work without regressing its road, fog, rendering, gameplay, or economy rules."
