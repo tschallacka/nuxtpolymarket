@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { pgTable, text, timestamp, boolean, index, numeric, integer, unique, jsonb } from 'drizzle-orm/pg-core'
 
 export const user = pgTable('user', {
@@ -148,6 +148,10 @@ export const pirateState = pgTable('pirate_state', {
   equippedSkinId: text('equipped_skin_id').notNull().default('starter'),
   ownedAbilityIds: jsonb('owned_ability_ids').$type<string[]>().notNull().default(['bomb']),
   equippedAbilityId: text('equipped_ability_id').notNull().default('bomb'),
+  // Per-ability upgrade track, keyed by ability id. A missing key means level
+  // 1 — every owned ability starts there, so the map only stores what has
+  // actually been paid for.
+  abilityLevels: jsonb('ability_levels').$type<Record<string, number>>().notNull().default({}),
   // Set when a voyage starts, cleared on finish. Server computes elapsed time
   // from this instead of trusting the client, and snapshots the power level
   // so mid-run upgrades can't raise the finish-run payout ceiling.
@@ -156,7 +160,7 @@ export const pirateState = pgTable('pirate_state', {
   runDifficultySnapshot: integer('run_difficulty_snapshot'),
   // Only full six-minute clears advance this value. Difficulty 0 is the
   // universal starting tier, so -50 means a new captain has no clear yet.
-  highestCompletedDifficulty: integer('highest_completed_difficulty').notNull().default(-50),
+  highestCompletedDifficulty: integer('highest_completed_difficulty').notNull().default(sql`'-50'`),
   bestCompletedLoot: integer('best_completed_loot').notNull().default(0),
   bestCompletedPower: integer('best_completed_power').notNull().default(0),
   bestCompletedSkinId: text('best_completed_skin_id').notNull().default('starter'),
@@ -209,6 +213,8 @@ export const shapezzState = pgTable('shapezz_state', {
   thrustersLevel: integer('thrusters_level').notNull().default(0),
   magnetLevel: integer('magnet_level').notNull().default(0),
   killHealLevel: integer('kill_heal_level').notNull().default(0),
+  // Gem-bought, consumed the moment a run starts (see shapezzHeadStartCost) — not a permanent chassis level.
+  headStartLevel: integer('head_start_level').notNull().default(0),
   weaponType: text('weapon_type').notNull().default('blaster'), // equipped weapon type
   blasterRarity: text('blaster_rarity').notNull().default('common'),
   blasterPurchasePrice: integer('blaster_purchase_price').notNull().default(0),
@@ -481,7 +487,7 @@ export const colonyLoot = pgTable('colony_loot', {
   quantity: integer('quantity').notNull().default(0)
 }, t => [
   index('colony_loot_userId_idx').on(t.userId),
-  unique('colony_loot_unique').on(t.userId, t.itemTypeId)
+  unique('colony_loot_unique').on(t.itemTypeId, t.userId)
 ])
 
 /** Claimed item inventory — spendable in the market and toward item-gated upgrades. */
@@ -492,7 +498,7 @@ export const colonyItems = pgTable('colony_items', {
   quantity: integer('quantity').notNull().default(0)
 }, t => [
   index('colony_items_userId_idx').on(t.userId),
-  unique('colony_items_unique').on(t.userId, t.itemTypeId)
+  unique('colony_items_unique').on(t.itemTypeId, t.userId)
 ])
 
 /** Leveled builder upgrade tracks (capacity, yield, speed, nutrition storage/efficiency). One row per track. */
@@ -503,7 +509,7 @@ export const colonyUpgrades = pgTable('colony_upgrades', {
   level: integer('level').notNull().default(0)
 }, t => [
   index('colony_upgrades_userId_idx').on(t.userId),
-  unique('colony_upgrades_unique').on(t.userId, t.trackId)
+  unique('colony_upgrades_unique').on(t.trackId, t.userId)
 ])
 
 /**
@@ -520,7 +526,7 @@ export const colonyBugResearch = pgTable('colony_bug_research', {
   level: integer('level').notNull().default(0)
 }, t => [
   index('colony_bug_research_userId_idx').on(t.userId),
-  unique('colony_bug_research_unique').on(t.userId, t.typeId)
+  unique('colony_bug_research_unique').on(t.typeId, t.userId)
 ])
 
 // ─── Hack Ops ─────────────────────────────────────────────────────────────────
