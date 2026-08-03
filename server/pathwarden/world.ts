@@ -179,9 +179,14 @@ export class PathwardenWorld {
     }
 
     enqueue(inputSequence: number, command: PathwardenInputCommand) {
+        if (this.commands.length >= 256) return false
         if (!Number.isSafeInteger(inputSequence) || inputSequence <= this.lastInputSequence || !this.canApply(command)) return false
         this.commands.push({ inputSequence, command })
         return true
+    }
+
+    get pendingCommandCount() {
+        return this.commands.length
     }
 
     canApply(command: PathwardenInputCommand) {

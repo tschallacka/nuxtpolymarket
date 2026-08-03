@@ -27,9 +27,12 @@ interface ActiveSession {
     world: PathwardenWorld
     lastPersistedTick: number
     persistPromise: Promise<void> | null
+    commandWindowStartedAt: number
+    commandsInWindow: number
 }
 
 const sessions = new Map<string, ActiveSession>()
+const MAX_COMMANDS_PER_SECOND = 120
 
 function send(session: ActiveSession, payload: ArrayBuffer) {
     try {
@@ -67,7 +70,18 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
         mapPlan: run.mapPlan,
         gameState: run.gameState ?? null
     })
-    return { peer, userId, runId, nextPacketSequence: 1, mapPlan: run.mapPlan, world, lastPersistedTick: -1, persistPromise: null }
+    return {
+        peer,
+        userId,
+        runId,
+        nextPacketSequence: 1,
+        mapPlan: run.mapPlan,
+        world,
+        lastPersistedTick: -1,
+        persistPromise: null,
+        commandWindowStartedAt: Date.now(),
+        commandsInWindow: 0
+    }
 }
 
 function persistWorld(session: ActiveSession, tick: number, terminal: boolean) {
@@ -98,12 +112,25 @@ function handleCommand(session: ActiveSession, command: PathwardenInputCommand, 
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
         return
     }
+    const now = Date.now()
+    if (now - session.commandWindowStartedAt >= 1000) {
+        session.commandWindowStartedAt = now
+        session.commandsInWindow = 0
+    }
+    if (session.commandsInWindow >= MAX_COMMANDS_PER_SECOND) {
+        send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, 'Pathwarden command rate limit exceeded'))
+        return
+    }
+    session.commandsInWindow++
     if (!session.world.canApply(command)) {
         const reason = 'Command is not valid in the current Pathwarden state'
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, reason))
         return
     }
-    if (!session.world.enqueue(inputSequence, command)) return
+    if (!session.world.enqueue(inputSequence, command)) {
+        send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, 'Pathwarden command queue is full'))
+        return
+    }
     send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
 }
 

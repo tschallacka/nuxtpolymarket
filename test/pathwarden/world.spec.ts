@@ -221,4 +221,13 @@ describe('Pathwarden authoritative world', () => {
         expect(restored.getEntities().find(entity => entity.id === 20)?.data.components).toMatchObject({ enemyType: 'brute', hp: 80 })
         expect(restored.getEntities().find(entity => entity.id === 30)?.data.components).toMatchObject({ targetId: 20, damage: 32 })
     })
+
+    it('bounds queued inputs before the tick can consume them', () => {
+        const world = new PathwardenWorld({ runId: 'run-11', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        for (let sequence = 1; sequence <= 256; sequence++) {
+            expect(world.enqueue(sequence, { type: 'select-tower', tower: 'bolt' })).toBe(true)
+        }
+        expect(world.pendingCommandCount).toBe(256)
+        expect(world.enqueue(257, { type: 'select-tower', tower: 'bolt' })).toBe(false)
+    })
 })
