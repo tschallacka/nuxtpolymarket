@@ -175,6 +175,73 @@ export class PathwardenWorld {
         }))
     }
 
+    exportGameState(): PathwardenGameState {
+        const entities = this.getEntities()
+        return {
+            phase: this.state.phase,
+            paused: this.state.paused,
+            wave: this.state.wave,
+            lives: this.state.lives,
+            maxLives: 20,
+            aether: this.state.aether,
+            score: this.state.score,
+            streak: 0,
+            flawlessWaves: 0,
+            spawnLeft: this.spawnRemaining,
+            spawnTotal: this.spawnRemaining,
+            spawnTimer: this.spawnCooldown,
+            combatRandomState: this.state.seed,
+            path: this.mapPlan.rooms.find(room => room.id === this.mapPlan.castleRoomId)?.roadCells ?? [],
+            claimedRoomIds: [this.mapPlan.castleRoomId],
+            activeRoomIds: [this.mapPlan.castleRoomId],
+            selectedTower: this.selectedTower,
+            towerPurchases: {},
+            relicRanks: {},
+            globalRelics: {},
+            relicInventory: [],
+            ashPiles: [],
+            interest: 0,
+            canSellRelics: false,
+            towers: entities.filter(entity => entity.data.type === 1).map(entity => ({
+                id: entity.id,
+                type: String(entity.data.components?.towerType ?? 'bolt'),
+                col: Number(entity.data.components?.col ?? entity.x),
+                row: Number(entity.data.components?.row ?? entity.y),
+                invested: Number(entity.data.components?.invested ?? 0),
+                cooldown: Number(entity.data.components?.cooldown ?? 0),
+                angle: 0,
+                level: 1,
+                merges: 0,
+                targeting: 'first' as const,
+                relicStacks: 0,
+                relicPower: 0,
+                relicShots: 0
+            })),
+            enemies: entities.filter(entity => entity.data.type === 2).map(entity => ({
+                id: entity.id,
+                type: String(entity.data.components?.enemyType ?? 'raider'),
+                route: [],
+                exitKey: 'castle-main',
+                progress: Number(entity.data.components?.progress ?? 0),
+                hp: Number(entity.data.components?.hp ?? 1),
+                maxHp: Number(entity.data.components?.maxHp ?? 1),
+                speed: 1,
+                reward: Number(entity.data.components?.reward ?? 0),
+                slow: 0,
+                slowTimer: 0,
+                healTimer: 0,
+                attackTimer: 0,
+                dotDamage: 0,
+                dotTimer: 0,
+                dotTick: 0
+            })),
+            projectiles: [],
+            towerId: this.nextEntityId,
+            enemyId: this.nextEntityId,
+            relicInstanceId: 1
+        }
+    }
+
     get lastAppliedInput() {
         return this.lastInputSequence
     }

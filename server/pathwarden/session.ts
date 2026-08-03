@@ -1,4 +1,5 @@
 import type { Peer } from 'crossws'
+import { and, eq, sql } from 'drizzle-orm'
 import { db } from '#server/database'
 import { pathwardenRuns } from '#server/database/schema'
 import { auth } from '#server/utils/auth'
@@ -22,6 +23,8 @@ interface ActiveSession {
     nextPacketSequence: number
     mapPlan: unknown
     world: PathwardenWorld
+    lastPersistedTick: number
+    persistPromise: Promise<void> | null
 }
 
 const sessions = new Map<string, ActiveSession>()
@@ -62,7 +65,22 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
         mapPlan: run.mapPlan,
         gameState: run.gameState ?? null
     })
-    return { peer, userId, runId, nextPacketSequence: 1, mapPlan: run.mapPlan, world }
+    return { peer, userId, runId, nextPacketSequence: 1, mapPlan: run.mapPlan, world, lastPersistedTick: -1, persistPromise: null }
+}
+
+function persistWorld(session: ActiveSession, tick: number, terminal: boolean) {
+    if (!terminal && (tick < 1 || tick % 20 !== 0)) return
+    if (tick <= session.lastPersistedTick) return
+    session.lastPersistedTick = tick
+    session.persistPromise = (session.persistPromise ?? Promise.resolve()).then(async () => {
+        await db.update(pathwardenRuns)
+            .set({
+                gameState: session.world.exportGameState(),
+                revision: sql`${pathwardenRuns.revision} + 1`,
+                updatedAt: new Date()
+            })
+            .where(and(eq(pathwardenRuns.id, session.runId), eq(pathwardenRuns.userId, session.userId)))
+    }).catch(() => {})
 }
 
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
@@ -96,6 +114,7 @@ export async function openPathwardenSession(peer: Peer) {
             components: entity.data.components
         })), { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
         send(session, encodeWorldSnapshot(snapshot, { sequence: session.nextPacketSequence++, acknowledgedInput: session.world.lastAppliedInput }))
+        persistWorld(session, snapshot.tick, snapshot.phase === 'victory' || snapshot.phase === 'defeat' || snapshot.phase === 'cashout')
     })
     sessions.set(session.runId, session)
     send(session, encodeHelloAck({ sequence: session.nextPacketSequence++ }))

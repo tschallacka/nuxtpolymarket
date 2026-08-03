@@ -973,7 +973,7 @@ async function continueCheckpoint() {
 }
 
 function scheduleSave() {
-  if (!runActive.value || !engine) return
+  if (!runActive.value || !engine || activeRunId.value) return
   saveDirty = true
   if (saveTimer) return
   saveTimer = setTimeout(() => {
@@ -983,7 +983,7 @@ function scheduleSave() {
 }
 
 async function persistSave(): Promise<void> {
-  if (!runActive.value || !engine || !saveDirty) return
+  if (!runActive.value || !engine || !saveDirty || activeRunId.value) return
   saveDirty = false
   const gameState = engine.exportGameState()
   try {
