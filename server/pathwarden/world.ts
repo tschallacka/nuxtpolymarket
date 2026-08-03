@@ -540,7 +540,9 @@ export class PathwardenWorld {
         const enemies = this.getEntities().filter(entity => entity.data.type === 2)
         for (const enemy of enemies) {
             const components = enemy.data.components ?? {}
-            const progress = Number(components.progress ?? 0) + 0.012
+            const slowTimer = Math.max(0, Number(components.slowTimer ?? 0) - 1)
+            const slow = slowTimer > 0 ? Math.max(0, Number(components.slow ?? 0)) : 0
+            const progress = Number(components.progress ?? 0) + 0.012 * (1 - Math.min(0.8, slow))
             if (progress >= 1) {
                 this.removeEntity(enemy.id)
                 this.state.lives = Math.max(0, this.state.lives - 1)
@@ -552,7 +554,7 @@ export class PathwardenWorld {
                 continue
             }
             const position = this.routePosition(progress)
-            this.updateEntity(enemy.id, { x: position.col, y: position.row, data: { type: 2, components: { ...components, progress } } })
+            this.updateEntity(enemy.id, { x: position.col, y: position.row, data: { type: 2, components: { ...components, progress, slow, slowTimer } } })
         }
         this.simulateTowers()
         this.simulateProjectiles()
@@ -591,18 +593,30 @@ export class PathwardenWorld {
         if (!enemies.length) return
         for (const tower of this.getEntities().filter(entity => entity.data.type === 1)) {
             const components = tower.data.components ?? {}
+            const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === String(components.towerType ?? 'bolt'))
+            if (!defense) continue
             const cooldown = Number(components.cooldown ?? 0)
             if (cooldown > 0) {
                 this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: cooldown - 1 } } })
                 continue
             }
-            const target = enemies[0]!
-            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: 8 } } })
+            const range = Math.max(2, defense.range / 45)
+            const inRange = enemies.filter(enemy => Math.hypot(enemy.x - tower.x, enemy.y - tower.y) <= range)
+            if (!inRange.length) continue
+            const targeting = String(components.targeting ?? 'first')
+            const target = [...inRange].sort((left, right) => targeting === 'strong'
+                ? Number(right.data.components?.hp ?? 0) - Number(left.data.components?.hp ?? 0)
+                : targeting === 'fast'
+                    ? Number(right.data.components?.speed ?? 1) - Number(left.data.components?.speed ?? 1)
+                    : Number(right.data.components?.progress ?? 0) - Number(left.data.components?.progress ?? 0))[0]!
+            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: Math.max(1, Math.round(defense.rate * 20)) } } })
             this.spawnEntity({ type: 3, components: {
                 towerType: String(components.towerType ?? 'bolt'),
                 sourceId: tower.id,
                 targetId: target.id,
-                damage: this.towerDamage(String(components.towerType ?? 'bolt')),
+                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1)),
+                splash: defense.splash / 45,
+                slow: defense.slow,
                 progress: 0
             } }, tower.x, tower.y, 0, target.x, target.y)
         }
@@ -620,14 +634,26 @@ export class PathwardenWorld {
             const nextX = projectile.x + (target.x - projectile.x) * 0.25
             const nextY = projectile.y + (target.y - projectile.y) * 0.25
             if (progress >= 1) {
-                const hp = Number(target.data.components?.hp ?? 1) - Number(components.damage ?? 1)
                 this.removeEntity(projectile.id)
                 this.spawnEntity({ type: 6, components: { kind: 'impact', progress: 0, duration: 8, color: 'primary' } }, target.x, target.y)
-                if (hp <= 0) {
-                    this.removeEntity(target.id)
-                    this.state.score += 10
-                } else {
-                    this.updateEntity(target.id, { data: { type: 2, components: { ...target.data.components, hp } } })
+                const splash = Math.max(0, Number(components.splash ?? 0))
+                const affected = this.getEntities().filter(candidate => candidate.data.type === 2
+                    && Math.hypot(candidate.x - target.x, candidate.y - target.y) <= splash)
+                for (const victim of affected) {
+                    const victimComponents = victim.data.components ?? {}
+                    const hp = Number(victimComponents.hp ?? 1) - Number(components.damage ?? 1)
+                    const slow = Math.max(Number(victimComponents.slow ?? 0), Number(components.slow ?? 0))
+                    if (hp <= 0) {
+                        this.removeEntity(victim.id)
+                        this.state.score += 10
+                    } else {
+                        this.updateEntity(victim.id, { data: { type: 2, components: {
+                            ...victimComponents,
+                            hp,
+                            slow,
+                            slowTimer: slow > 0 ? 24 : Number(victimComponents.slowTimer ?? 0)
+                        } } })
+                    }
                 }
             } else {
                 this.updateEntity(projectile.id, { x: nextX, y: nextY, data: { type: 3, components: { ...components, progress } } })
@@ -671,8 +697,10 @@ export class PathwardenWorld {
         }
     }
 
-    private towerDamage(type: string) {
-        return (PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25) * (1 + this.state.relicPower)
+    private towerDamage(type: string, level: number) {
+        const base = PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25
+        const levelPower = level >= 3 ? 3.35 : level >= 2 ? 1.85 : 1
+        return base * levelPower * (1 + this.state.relicPower)
     }
 
     private spawnRelic(relic: PathwardenSavedRelic) {
