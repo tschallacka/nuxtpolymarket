@@ -87,6 +87,7 @@ export function usePathwardenRealtime() {
                         : next.phase === 'upgrade' ? 'relic' : null
                 if (!expectedChoiceKind || choiceOffer.value?.kind !== expectedChoiceKind) choiceOffer.value = null
                 lastAcknowledgedInput.value = Math.max(lastAcknowledgedInput.value, packet.header.acknowledgedInput)
+                nextInputSequence = Math.max(nextInputSequence, packet.header.acknowledgedInput + 1)
                 for (const inputSequence of pending.keys()) {
                     if (inputSequence <= packet.header.acknowledgedInput) {
                         pending.delete(inputSequence)
@@ -170,6 +171,7 @@ export function usePathwardenRealtime() {
                     sentAt.delete(inputSequence)
                 }
                 lastAcknowledgedInput.value = Math.max(lastAcknowledgedInput.value, inputSequence)
+                nextInputSequence = Math.max(nextInputSequence, inputSequence + 1)
                 if (!payload?.accepted && payload?.reason) lastError.value = payload.reason
                 if (snapshot.value) reconcile(snapshot.value)
                 return
