@@ -75,7 +75,7 @@ export class PathwardenWorld {
     private dirty = false
     private onChange: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void = () => {}
     private onAmbientStoryComplete: (storyId: number) => void = () => {}
-    private onTickMetrics: (durationMs: number) => void = () => {}
+    private onTickMetrics: (durationMs: number, entityCount: number, pendingCommands: number) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
         this.runId = source.runId
@@ -188,7 +188,7 @@ export class PathwardenWorld {
         this.onAmbientStoryComplete = handler
     }
 
-    setTickMetricsHandler(handler: (durationMs: number) => void) {
+    setTickMetricsHandler(handler: (durationMs: number, entityCount: number, pendingCommands: number) => void) {
         this.onTickMetrics = handler
     }
 
@@ -416,7 +416,7 @@ export class PathwardenWorld {
         })
         if (changed || this.dirty || this.state.tick % 10 === 0) this.notifyChange()
         else this.dirty = false
-        this.onTickMetrics(Math.max(0, Date.now() - startedAt))
+        this.onTickMetrics(Math.max(0, Date.now() - startedAt), this.entities.size, this.commands.length)
     }
 
     private notifyChange() {

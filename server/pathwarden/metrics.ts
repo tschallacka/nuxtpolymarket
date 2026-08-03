@@ -11,6 +11,9 @@ export interface PathwardenRuntimeMetrics {
     ticks: number
     totalTickMs: number
     maxTickMs: number
+    ticksOverBudget: number
+    maxEntityCount: number
+    maxPendingCommands: number
 }
 
 const metrics: PathwardenRuntimeMetrics = {
@@ -25,7 +28,10 @@ const metrics: PathwardenRuntimeMetrics = {
     bytesOut: 0,
     ticks: 0,
     totalTickMs: 0,
-    maxTickMs: 0
+    maxTickMs: 0,
+    ticksOverBudget: 0,
+    maxEntityCount: 0,
+    maxPendingCommands: 0
 }
 
 export function pathwardenMetricConnection(replaced: boolean) {
@@ -53,10 +59,13 @@ export function pathwardenMetricPacket(direction: 'in' | 'out', bytes: number) {
     }
 }
 
-export function pathwardenMetricTick(durationMs: number) {
+export function pathwardenMetricTick(durationMs: number, entityCount = 0, pendingCommands = 0) {
     metrics.ticks++
     metrics.totalTickMs += durationMs
     metrics.maxTickMs = Math.max(metrics.maxTickMs, durationMs)
+    if (durationMs > 50) metrics.ticksOverBudget++
+    metrics.maxEntityCount = Math.max(metrics.maxEntityCount, entityCount)
+    metrics.maxPendingCommands = Math.max(metrics.maxPendingCommands, pendingCommands)
 }
 
 export function getPathwardenRuntimeMetrics() {
