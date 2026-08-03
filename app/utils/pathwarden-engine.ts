@@ -4463,6 +4463,12 @@ export class PathwardenEngine {
     }
     const cell = this.pointerCell(event)
     if (!cell) return
+    if (this.serverAuthoritative && this.phase === 'planning') {
+      this.callbacks.onCommand?.({ type: 'place-tower', col: cell.col, row: cell.row })
+      this.message = `${towerStats(this.selectedTower).name} placement requested.`
+      this.emitState()
+      return
+    }
     if (this.phase !== 'planning' || !this.revealed.has(cellKey(cell))) return
     const existing = this.towers.find(tower => tower.col === cell.col && tower.row === cell.row)
     if (existing) {
