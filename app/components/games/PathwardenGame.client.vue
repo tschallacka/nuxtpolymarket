@@ -389,6 +389,7 @@ let engine: PathwardenEngine | null = null
 let unregisterDevBridge = () => {}
 let cooldownClock: ReturnType<typeof setInterval> | null = null
 let restoredRun: { mapPlan: PathwardenMapPlan, gameState: PathwardenGameState } | undefined
+let startingRun: Promise<boolean> | null = null
 
 const towerTypes = computed(() => (boostState.value?.defenses
   ?.filter(defense => defense.owned)
@@ -668,26 +669,32 @@ async function startWave() {
 
 async function ensureRunStarted() {
   if (runActive.value) return true
-  try {
-    const response = await $fetch('/api/pathwarden/start-run', {
-      method: 'POST',
-      body: {
-        realm: selectedRealm.value,
-        useSurge: useSurge.value,
-        seed: engine?.exportMapPlan().seed
-      }
-    })
-    if (!response.run) return false
-    runActive.value = true
-    activeRunId.value = response.run.id
-    engine?.setServerAuthoritative()
-    realtime.connect(response.run.id)
-    await refreshBoosts()
-    return true
-  } catch (error: unknown) {
-    toast.add({ title: apiErrorMessage(error, 'Could not start the run'), color: 'error' })
-    return false
-  }
+  if (startingRun) return startingRun
+  startingRun = (async () => {
+    try {
+      const response = await $fetch('/api/pathwarden/start-run', {
+        method: 'POST',
+        body: {
+          realm: selectedRealm.value,
+          useSurge: useSurge.value,
+          seed: engine?.exportMapPlan().seed
+        }
+      })
+      if (!response.run) return false
+      runActive.value = true
+      activeRunId.value = response.run.id
+      engine?.setServerAuthoritative()
+      realtime.connect(response.run.id)
+      await refreshBoosts()
+      return true
+    } catch (error: unknown) {
+      toast.add({ title: apiErrorMessage(error, 'Could not start the run'), color: 'error' })
+      return false
+    } finally {
+      startingRun = null
+    }
+  })()
+  return startingRun
 }
 
 async function defileTemple() {
