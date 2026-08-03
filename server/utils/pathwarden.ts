@@ -72,10 +72,9 @@ export async function getLockedPathwardenState(tx: DbExecutor, userId: string) {
 export type PathwardenFinishReason = 'cashout' | 'victory' | 'defeat'
 
 /**
- * What actually happened in the run, read from the persisted game state — never
- * from the request body. The client's finish-run call only chooses the reason;
- * every number here comes from the row the engine saved through run.put, which
- * is itself capped against the clock.
+ * What actually happened in the run, read from the server-persisted game state
+ * — never from the request body. The client's finish-run call only chooses the
+ * reason; every number here comes from the authoritative world persistence.
  */
 export interface PathwardenRunReport {
     reason: PathwardenFinishReason

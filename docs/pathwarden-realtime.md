@@ -34,7 +34,7 @@ The server sends a full map and entity/world snapshot on connection. The compact
 4. In development, an authenticated operator can inspect bounded replay records at `/api/pathwarden/replay?runId=...`. Records contain semantic commands, ticks, acceptance, event IDs/types, and compact state hashes; `comparePathwardenReplay` reports bounded first divergences.
 5. Runtime counters are available through the authenticated development endpoint `/api/pathwarden/metrics`.
 
-To roll back a deployment, stop accepting new live sessions on the new server build and let existing sessions reach a terminal or persisted checkpoint. Do not re-enable the legacy HTTP save path while a WebSocket session owns a run; the `409` ownership guard exists to prevent split authority.
+To roll back a deployment, stop accepting new live sessions on the new server build and let existing sessions reach a terminal or persisted checkpoint. Run state is persisted by the authoritative server world; gameplay state is never accepted through a client HTTP save endpoint.
 
 ## Adding a gameplay feature
 
