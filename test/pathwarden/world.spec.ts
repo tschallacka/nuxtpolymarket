@@ -452,4 +452,23 @@ describe('Pathwarden authoritative world', () => {
         expect(projectiles).toHaveLength(2)
         expect(Number(projectiles[1]?.data.components?.damage)).toBeCloseTo(Number(projectiles[0]?.data.components?.damage) * 0.48)
     })
+
+    it('applies global relic effects without creating a fake inventory relic', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-global-relic', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const openRelicChoice = (world as unknown as { openRelicChoice: () => void }).openRelicChoice
+        openRelicChoice.call(world)
+        const privateWorld = world as unknown as { choiceKeys: string[] }
+        privateWorld.choiceKeys = ['heart-common']
+        world.enqueue(1, { type: 'relic-choice', choice: 0, offerRevision: world.getChoiceOffer()!.offerRevision })
+        world.start()
+        vi.advanceTimersByTime(50)
+        world.stop()
+
+        const saved = world.exportGameState()
+        expect(saved.maxLives).toBe(23)
+        expect(saved.lives).toBe(23)
+        expect(saved.globalRelics.heart).toMatchObject({ level: 1, power: 1 })
+        expect(saved.relicInventory).toHaveLength(0)
+    })
 })

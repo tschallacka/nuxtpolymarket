@@ -1,4 +1,4 @@
-import type { PathwardenGameState, PathwardenMapPlan, PathwardenSavedRelic } from '#shared/types/pathwarden-save'
+import type { PathwardenGameState, PathwardenMapPlan, PathwardenSavedRelic, PathwardenSavedRelicEffects } from '#shared/types/pathwarden-save'
 import {
     PATHWARDEN_AMBIENT_FAMILIES,
     PATHWARDEN_DEFENSE_BLUEPRINTS,
@@ -96,6 +96,9 @@ export class PathwardenWorld {
     private ambientCooldown = 0
     private nextAmbientStoryId = 1
     private nextRelicInstanceId = 1
+    private maxLives = 20
+    private globalRelicEffects: PathwardenSavedRelicEffects = pathwardenRelicEffects('', 0)
+    private globalRelics: Record<string, { level: number, power: number, effects: PathwardenSavedRelicEffects, color?: string }> = {}
     private choiceKind: 'checkpoint' | 'relic' | 'path' | null = null
     private choiceRevision = 0
     private choices: number[] = []
@@ -157,6 +160,13 @@ export class PathwardenWorld {
             entityCount: 0,
             claimedRoomIds: [...this.claimedRooms],
             revealedCells: []
+        }
+        this.maxLives = Math.max(this.boosts.startingLives, Number(source.gameState?.maxLives ?? this.boosts.startingLives))
+        for (const [family, relic] of Object.entries(source.gameState?.globalRelics ?? {})) {
+            if (family === 'server') continue
+            const effects = relic.effects ?? pathwardenRelicEffects(family, Number(relic.power ?? 0))
+            this.globalRelics[family] = { level: Number(relic.level ?? 0), power: Number(relic.power ?? 0), effects, color: relic.color }
+            this.addEffects(this.globalRelicEffects, effects)
         }
         this.lastInputSequence = Math.max(0, Math.floor(source.gameState?.lastInputSequence ?? 0))
         this.towerPurchases = { ...(source.gameState?.towerPurchases ?? {}) }
@@ -357,7 +367,7 @@ export class PathwardenWorld {
             paused: this.state.paused,
             wave: this.state.wave,
             lives: this.state.lives,
-            maxLives: 20,
+            maxLives: this.maxLives,
             aether: this.state.aether,
             score: this.state.score,
             streak: this.streak,
@@ -373,7 +383,8 @@ export class PathwardenWorld {
             towerPurchases: { ...this.towerPurchases },
             relicRanks: {},
             globalRelics: {
-                server: { level: Math.round(this.state.relicPower * 10), power: this.state.relicPower }
+                server: { level: Math.round(this.state.relicPower * 10), power: this.state.relicPower },
+                ...this.globalRelics
             },
             relicInventory: entities.filter(entity => entity.data.type === 5).map(entity => this.relicFromEntity(entity)),
             ashPiles: [],
@@ -655,20 +666,35 @@ export class PathwardenWorld {
                 const relicId = this.choiceKeys[command.choice]
                 const definition = relicId ? pathwardenRelicDefinition(relicId) : undefined
                 if (!definition) return false
-                this.spawnRelic({
+                if (definition.towerSpecific) this.spawnRelic({
                     instanceId: this.nextRelicInstanceId++,
                     id: `${definition.id}-${this.state.tick}`,
                     family: definition.family,
                     rarity: definition.rarity,
                     name: definition.name,
                     description: definition.description,
-                    towerSpecific: definition.towerSpecific,
+                    towerSpecific: true,
                     iconIndex: definition.iconIndex,
                     power: definition.power,
                     sellValue: definition.sellValue,
                     color: definition.color,
                     effects: definition.effects
                 })
+                else {
+                    const current = this.globalRelics[definition.family]
+                    this.globalRelics[definition.family] = {
+                        level: (current?.level ?? 0) + 1,
+                        power: (current?.power ?? 0) + definition.power,
+                        effects: current ? this.addEffects(current.effects, definition.effects) : { ...definition.effects },
+                        color: definition.color
+                    }
+                    this.addEffects(this.globalRelicEffects, definition.effects)
+                    if (definition.family === 'heart') {
+                        const hearts = Math.max(1, Math.round(3 * definition.power))
+                        this.maxLives += hearts
+                        this.state.lives = Math.min(this.maxLives, this.state.lives + hearts)
+                    }
+                }
             }
             this.choiceKind = null
             this.choices = []
@@ -714,8 +740,7 @@ export class PathwardenWorld {
             if (dotTimer > 0 && dotHp <= 0) {
                 this.removeEntity(enemy.id)
                 this.emitGameplayEvent(PathwardenGameplayEventType.EnemyDefeated, enemy.id, enemy.x, enemy.y)
-                this.state.score += 10
-                this.state.aether += Math.max(0, Number(components.reward ?? 0))
+                this.awardEnemyDefeat(components)
                 continue
             }
             const slowTimer = Math.max(0, Number(components.slowTimer ?? 0) - 1)
@@ -797,7 +822,7 @@ export class PathwardenWorld {
                 progress: 0,
                 hp,
                 maxHp: hp,
-                reward: (2 + this.state.wave) * profile.reward * this.boosts.bountyMultiplier,
+                reward: (2 + this.state.wave) * profile.reward * this.boosts.bountyMultiplier * (1 + this.globalRelicEffects.aetherBonusPct / 100),
                 speed: profile.speed,
                 leakDamage: profile.leakDamage,
                 healTimer: 44
@@ -820,7 +845,7 @@ export class PathwardenWorld {
             const relicFamily = String(components.relicFamily ?? '')
             const relicPower = Number(components.relicPower ?? 0)
             const relicEffects = this.relicEffects(relicFamily, relicPower)
-            const range = Math.max(2, defense.range / 45 * this.boosts.rangeMultiplier * (1 + relicEffects.rangePct / 100))
+            const range = Math.max(2, defense.range / 45 * this.boosts.rangeMultiplier * (1 + (this.globalRelicEffects.rangePct + relicEffects.rangePct) / 100))
             const inRange = enemies.filter(enemy => Math.hypot(enemy.x - tower.x, enemy.y - tower.y) <= range)
             if (!inRange.length) continue
             const targeting = String(components.targeting ?? 'first')
@@ -830,7 +855,7 @@ export class PathwardenWorld {
                     ? Number(right.data.components?.speed ?? 1) - Number(left.data.components?.speed ?? 1)
                     : Number(right.data.components?.progress ?? 0) - Number(left.data.components?.progress ?? 0))[0]!
             const shotCount = Number(components.relicShots ?? 0) + 1
-            const nextCooldown = Math.max(1, Math.round(defense.rate * 20 / (this.boosts.rateMultiplier * (1 + relicEffects.attackSpeedPct / 100))))
+            const nextCooldown = Math.max(1, Math.round(defense.rate * 20 / (this.boosts.rateMultiplier * (1 + (this.globalRelicEffects.attackSpeedPct + relicEffects.attackSpeedPct) / 100))))
             this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: nextCooldown, relicShots: shotCount } } })
             const projectile = (damageMultiplier = 1) => this.spawnEntity({ type: 3, components: {
                 towerType: String(components.towerType ?? 'bolt'),
@@ -894,8 +919,7 @@ export class PathwardenWorld {
                     if (hp <= 0) {
                         this.removeEntity(victim.id)
                         this.emitGameplayEvent(PathwardenGameplayEventType.EnemyDefeated, victim.id, victim.x, victim.y)
-                        this.state.score += 10
-                        this.state.aether += Math.max(0, Number(victimComponents.reward ?? 0)) * (1 + Number(components.aetherBonusPct ?? 0) / 100)
+                        this.awardEnemyDefeat(victimComponents, Number(components.aetherBonusPct ?? 0))
                     } else {
                         this.updateEntity(victim.id, { data: { type: 2, components: {
                             ...victimComponents,
@@ -906,6 +930,9 @@ export class PathwardenWorld {
                             dotTimer: Math.max(Number(victimComponents.dotTimer ?? 0), Number(components.burnDuration ?? 0))
                         } } })
                     }
+                }
+                if (String(components.relicFamily ?? '') === 'leech' && this.state.lives < this.maxLives) {
+                    this.state.lives = Math.min(this.maxLives, this.state.lives + this.maxLives * 0.0012 * Number(components.relicPower ?? 0))
                 }
             } else {
                 this.updateEntity(projectile.id, { x: nextX, y: nextY, data: { type: 3, components: { ...components, progress } } })
@@ -962,6 +989,19 @@ export class PathwardenWorld {
 
     private relicEffects(family: string, power: number) {
         return pathwardenRelicEffects(family, power)
+    }
+
+    private awardEnemyDefeat(components: Record<string, number | string | boolean>, localAetherBonusPct = 0) {
+        this.state.score += 10
+        this.state.aether += Math.max(0, Number(components.reward ?? 0)) * (1 + localAetherBonusPct / 100)
+        if (this.globalRelicEffects.repairPct > 0 && this.state.lives < this.maxLives) {
+            this.state.lives = Math.min(this.maxLives, this.state.lives + this.maxLives * this.globalRelicEffects.repairPct / 100)
+        }
+    }
+
+    private addEffects(target: PathwardenSavedRelicEffects, source: PathwardenSavedRelicEffects) {
+        for (const key of Object.keys(target) as Array<keyof PathwardenSavedRelicEffects>) target[key] += source[key] ?? 0
+        return target
     }
 
     private towerDamage(type: string, level: number, relicPower = 0, relicFamily = '') {
