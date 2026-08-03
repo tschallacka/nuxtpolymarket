@@ -34,6 +34,9 @@ export function usePathwardenRealtime() {
     const pending = new Map<number, PathwardenInputCommand>()
     let socket: WebSocket | null = null
     let nextInputSequence = 1
+    let activeRunId: string | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let intentionalClose = false
 
     function reconcile(serverSnapshot: PathwardenWorldSnapshot) {
         let next = { ...serverSnapshot }
@@ -113,6 +116,10 @@ export function usePathwardenRealtime() {
     }
 
     function close() {
+        intentionalClose = true
+        activeRunId = null
+        if (reconnectTimer) clearTimeout(reconnectTimer)
+        reconnectTimer = null
         socket?.close(1000, 'Pathwarden view closed')
         socket = null
         status.value = 'disconnected'
@@ -129,27 +136,41 @@ export function usePathwardenRealtime() {
     function connect(runId: string) {
         if (!import.meta.client || !runId) return
         close()
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        socket = new WebSocket(`${protocol}//${window.location.host}/api/pathwarden/ws?runId=${encodeURIComponent(runId)}`)
-        socket.binaryType = 'arraybuffer'
-        status.value = 'connecting'
-        lastError.value = null
-        socket.onopen = () => {
-            status.value = 'connected'
-            socket?.send(encodeHello())
-            for (const [inputSequence, command] of pending) {
-                socket?.send(encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0))
+        activeRunId = runId
+        intentionalClose = false
+        const open = () => {
+            if (!activeRunId || activeRunId !== runId) return
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+            socket = new WebSocket(`${protocol}//${window.location.host}/api/pathwarden/ws?runId=${encodeURIComponent(runId)}`)
+            socket.binaryType = 'arraybuffer'
+            status.value = 'connecting'
+            lastError.value = null
+            socket.onopen = () => {
+                status.value = 'connected'
+                socket?.send(encodeHello())
+                for (const [inputSequence, command] of pending) {
+                    socket?.send(encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0))
+                }
+            }
+            socket.onmessage = handlePacket
+            socket.onerror = () => {
+                status.value = 'error'
+                lastError.value = 'Pathwarden gameplay connection failed'
+            }
+            socket.onclose = () => {
+                socket = null
+                if (!intentionalClose && activeRunId === runId) {
+                    status.value = 'connecting'
+                    reconnectTimer = setTimeout(() => {
+                        reconnectTimer = null
+                        open()
+                    }, 1000)
+                } else if (status.value !== 'error') {
+                    status.value = 'disconnected'
+                }
             }
         }
-        socket.onmessage = handlePacket
-        socket.onerror = () => {
-            status.value = 'error'
-            lastError.value = 'Pathwarden gameplay connection failed'
-        }
-        socket.onclose = () => {
-            if (status.value !== 'error') status.value = 'disconnected'
-            socket = null
-        }
+        open()
     }
 
     function send(command: PathwardenInputCommand) {
