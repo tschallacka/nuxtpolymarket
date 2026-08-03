@@ -383,6 +383,7 @@ const keyboardPan = ref(Boolean(boostState.value?.keyboardPan))
 const savingSkipIntro = ref(false)
 const savingKeyboardPan = ref(false)
 let engine: PathwardenEngine | null = null
+let unregisterDevBridge = () => {}
 const SAVE_DEBOUNCE_MS = 2500
 let cooldownClock: ReturnType<typeof setInterval> | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -1085,11 +1086,45 @@ onMounted(async () => {
   unlockedRealm.value = boostState.value?.progression.maxUnlockedRealm ?? 1
   if (!restoredRun && skipIntro.value) await createFreshMapWithLoading()
   else createGame(restoredRun)
+  if (import.meta.dev) {
+    const { registerPathwardenDevBridge } = await import('~/utils/pathwarden-dev-bridge')
+    unregisterDevBridge = registerPathwardenDevBridge({
+      canvas: () => canvas.value,
+      engine: () => engine,
+      actions: {
+        startWave: { description: 'Start the next enemy wave', run: () => engine?.startWave() },
+        selectBallista: { description: 'Select the Ballista tower', run: () => engine?.selectTower('bolt') },
+        inspectFrontier: { description: 'Enter frontier selection for development inspection', run: () => engine?.debugOpenFrontier() },
+        claimFrontier: { description: 'Claim a preplanned frontier by index', run: input => engine?.debugClaimFrontier(Number(input) || 0) },
+        toggleVisualGuides: { description: 'Toggle geometry, road, and trajectory guides', run: () => engine?.debugToggleVisuals() },
+        spawnCrew: { description: 'Spawn a construction crew for development inspection', run: () => engine?.debugSpawnCrew() },
+        populateVillage: { description: 'Populate every ambient village vignette', run: () => engine?.debugPopulateVillage() },
+        triggerIdleStory: { description: 'Trigger an ambient story by ID, or a random one', run: input => engine?.debugTriggerAmbient(Number(input) || 0) },
+        previewIdleStory: {
+          description: 'Preview an ambient story at an exact normalized progress',
+          run: input => {
+            const preview = input as { storyId?: number, progress?: number }
+            engine?.debugPreviewAmbientStory(Number(preview?.storyId) || 1, Number(preview?.progress) || 0.5)
+          }
+        },
+        grantAether: { description: 'Grant audit Aether in development', run: input => engine?.debugGrantAether(Number(input) || 1000) },
+        buildLoadout: { description: 'Build a balanced development loadout', run: () => engine?.debugBuildLoadout() },
+        spendEconomically: { description: 'Invest only currently available Aether in a balanced loadout', run: () => engine?.debugSpendEconomically() },
+        toggleRoadLab: { description: 'Toggle unlimited Aether and frontier claims', run: () => engine?.debugToggleSandbox() },
+        setTimeScale: { description: 'Set development simulation speed from 1–10', run: input => engine?.debugSetTimeScale(Number(input) || 1) },
+        previewLateWave: { description: 'Prepare a mixed guardian wave for art inspection', run: () => engine?.debugPreviewLateWave() },
+        offerRelics: { description: 'Open a deterministic relic draft for UI and drag testing', run: () => engine?.debugOfferRelics() },
+        togglePause: { description: 'Pause or resume the simulation', run: () => engine?.togglePause() },
+        restart: { description: 'Start a fresh run', run: restart }
+      }
+    })
+  }
 })
 
 onBeforeUnmount(() => {
   if (cooldownClock) clearInterval(cooldownClock)
   if (saveTimer) clearTimeout(saveTimer)
+  unregisterDevBridge()
   void flushSave()
   engine?.destroy()
 })

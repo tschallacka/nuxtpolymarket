@@ -1,6 +1,6 @@
 ---
 name: playwright-game-debug
-description: Debug Polynux canvas and Pixi games with Playwright using the development-only game bridge. Use for visual defects, canvas interaction failures, responsive game layouts, Pixi scene visibility, runtime state inspection, browser console errors, screenshots, traces, or automated smoke tests under app games and canvas engines.
+description: Debug Pathwarden with Playwright using its development-only bridge. Use for Pathwarden visual defects, canvas interaction failures, responsive layouts, runtime state inspection, browser console errors, screenshots, traces, or automated smoke tests. Other games intentionally have no development bridge.
 ---
 
 # Playwright Game Debug
@@ -13,8 +13,8 @@ Use the development bridge before relying on coordinate guesses. It is available
 2. Start Nuxt with `bun run dev`.
 3. Reuse an installed Playwright dependency. If absent and browser automation is required, add it with Bun only.
 4. Sign in through the UI or API and retain Playwright storage state when the route is protected.
-5. Navigate to the game route and wait for the registered bridge ID.
-6. Inspect bridge state and the Pixi scene before taking screenshots or clicking coordinates.
+5. Navigate to Pathwarden and wait for its registered bridge ID.
+6. Inspect bridge state before taking screenshots or clicking coordinates.
 7. Capture console errors, failed requests, a trace, and screenshots at the relevant viewport.
 8. Reproduce at least once after the fix and keep assertions based on stable state or labels.
 
@@ -26,32 +26,25 @@ Evaluate the bridge inside the page:
 const games = await page.evaluate(() => window.__POLYNUX_DEV_BRIDGE__?.list())
 
 await page.evaluate(async () => {
-  await window.__POLYNUX_DEV_BRIDGE__?.waitFor('shapezz')
+await window.__POLYNUX_DEV_BRIDGE__?.waitFor()
 })
 
 const inspection = await page.evaluate(() =>
-  window.__POLYNUX_DEV_BRIDGE__?.inspect('shapezz')
+  window.__POLYNUX_DEV_BRIDGE__?.inspect()
 )
 
 await page.evaluate(() =>
-  window.__POLYNUX_DEV_BRIDGE__?.run('shapezz', 'togglePause')
+  window.__POLYNUX_DEV_BRIDGE__?.run('togglePause')
 )
 ```
 
-`list()` returns IDs, renderer kinds, and named actions. `inspect(id)` returns serializable canvas dimensions, game state when provided, and a bounded Pixi scene tree when available. `run(id, action, input?)` invokes an explicitly registered development action. `waitFor(id, timeoutMs?)` waits for asynchronous engine initialization.
+`list()` returns the Pathwarden descriptor and named actions. `inspect()` returns serializable canvas dimensions and the canonical state from `PathwardenEngine.getDebugState()`. `run(action, input?)` invokes an explicitly registered Pathwarden development action. `waitFor(timeoutMs?)` waits for asynchronous Pathwarden initialization.
 
-Current IDs:
+Current ID:
 
-- `aethergates`
-- `book-of-shadows`
-- `candy-madness`
-- `fire-in-the-hole`
-- `pirate-raid`
-- `shapezz`
-- `spinata`
-- `xeno-slot`
+- `pathwarden`
 
-Discover IDs with `list()` instead of assuming this list is exhaustive.
+Other games deliberately do not register a bridge. Use their visible DOM controls and normal pointer interaction for browser checks.
 
 ## Visual debugging
 
@@ -64,19 +57,13 @@ For interaction:
 - Use canvas-relative coordinates only when testing pointer mechanics.
 - Read `inspect(id).canvas` before translating design coordinates to CSS pixels.
 
-For Pixi:
-
-- Search the scene snapshot by `label` and `type`.
-- Add stable `label` values to important containers or sprites when an assertion needs them.
-- Do not expose raw Pixi objects through the bridge; return serializable snapshots.
-
 ## Extending the bridge
 
-Register non-Pixi games with `registerGameDevBridge` from `app/utils/game-dev-bridge.ts`. Register Pixi applications with `registerPixiDevBridge`. Provide stable kebab-case IDs, serializable state, and narrowly scoped named actions. Always call the returned unregister function during teardown.
+Pathwarden uses `registerPathwardenDevBridge` from `app/utils/pathwarden-dev-bridge.ts`. Its inspection state is obtained directly from `PathwardenEngine.getDebugState()`; do not create a second manually maintained state object. Provide only narrowly scoped named actions and always call the returned unregister function during teardown.
 
-Shared slot games should pass their ID to `initSlotPixiApp`; registration and cleanup are handled there.
+Other games must not register with a bridge or pass bridge IDs through shared bootstraps. Their gameplay state belongs only to their own component and server API.
 
-Guard every integration with `import.meta.dev` and dynamically import `game-dev-bridge.ts` inside that guard. Do not statically import the bridge from game code. This keeps the entire bridge module out of production bundles and ensures production execution never patches a Pixi lifecycle or registers debug state.
+Guard the Pathwarden integration with `import.meta.dev` and dynamically import `pathwarden-dev-bridge.ts` inside that guard. Do not statically import the bridge from the component. This keeps the bridge module out of production bundles.
 
 Never expose secrets, session tokens, arbitrary code execution, database mutation helpers, or production-only state through the bridge.
 

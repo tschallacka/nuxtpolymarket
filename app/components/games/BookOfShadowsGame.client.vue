@@ -539,7 +539,7 @@ async function initPixi() {
     }
   }
 
-  pixiApp = await initSlotPixiApp(Application, { width: APP_W, height: APP_H }, () => destroyed, 'book-of-shadows')
+  pixiApp = await initSlotPixiApp(Application, { width: APP_W, height: APP_H }, () => destroyed)
   if (!pixiApp) return
   canvasHost.value.appendChild(pixiApp.canvas)
 
