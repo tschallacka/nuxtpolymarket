@@ -129,7 +129,9 @@ describe('Pathwarden binary gameplay protocol', () => {
             { type: 'fuse-tower', sourceId: 4, targetId: 9 },
             { type: 'salvage-tower', id: 9 },
             { type: 'move-tower', id: 9, col: 31, row: 12 },
-            { type: 'set-targeting', id: 9, targeting: 'strong' as const }
+            { type: 'set-targeting', id: 9, targeting: 'strong' as const },
+            { type: 'sell-relic', instanceId: 8 },
+            { type: 'bind-relic', towerId: 9, instanceId: 8 }
         ]
         for (const command of commands) {
             const decoded = decodePacket(encodeInputCommand(3, command))
