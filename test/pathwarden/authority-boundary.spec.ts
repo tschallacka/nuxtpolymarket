@@ -42,4 +42,22 @@ describe('Pathwarden authority boundaries', () => {
             .every(path => !readFileSync(path, 'utf8').includes('pathwarden-dev-bridge'))
         ).toBe(true)
     })
+
+    it('isolates legacy renderer galleries to development-only routes', () => {
+        const debugPages = filesUnder(resolve(root, 'app/pages/pathwarden/debug'))
+            .filter(path => path.endsWith('.vue'))
+        expect(debugPages.length).toBeGreaterThan(0)
+        for (const path of debugPages) {
+            const source = readFileSync(path, 'utf8')
+            expect(source).toContain('import.meta.dev')
+            expect(source).toContain("navigateTo('/pathwarden')")
+        }
+
+        for (const path of [
+            resolve(root, 'app/components/pathwarden/DebugGallery.client.vue'),
+            resolve(root, 'app/components/pathwarden/RelicSwapDebug.client.vue')
+        ]) {
+            expect(readFileSync(path, 'utf8')).toContain('if (!import.meta.dev) return')
+        }
+    })
 })

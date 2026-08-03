@@ -35,6 +35,7 @@ watch(idleVariation, (variation) => {
 })
 
 onMounted(() => {
+  if (!import.meta.dev) return
   if (!canvas.value) return
   engine = new PathwardenEngine(canvas.value, {
     onState: () => {},

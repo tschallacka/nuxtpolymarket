@@ -894,6 +894,7 @@ watch(workbenchOpen, (open) => {
 })
 
 function createEngine() {
+  if (!import.meta.dev) return
   if (props.liveMode) {
     engine = props.liveEngine
     return
@@ -919,7 +920,7 @@ function createEngine() {
 }
 
 function prepareScenario() {
-  if (props.liveMode) return
+  if (!import.meta.dev || props.liveMode) return
   if (!engine) createEngine()
   engine?.debugSetAether(debugAetherBalance.value)
   engine?.debugSetArcanistLevel(arcanistLevel.value)
@@ -1726,7 +1727,7 @@ onMounted(() => {
     drawOdds()
   }
   relicIconSheet.src = '/games/pathwarden/relics.png'
-  if (props.liveMode) return
+  if (!import.meta.dev || props.liveMode) return
   createEngine()
   prepareScenario()
 })
