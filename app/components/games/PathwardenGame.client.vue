@@ -1050,7 +1050,7 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
       await settleRun(won ? 'victory' : 'defeat')
     },
     onCommand: (command: PathwardenInputCommand) => {
-      if (realtime.status.value === 'connected') realtime.send(command)
+      if (activeRunId.value) realtime.send(command)
     }
   }, boostState.value
     ? pathwardenBoostEffects(boostState.value.levels, useSurge.value)

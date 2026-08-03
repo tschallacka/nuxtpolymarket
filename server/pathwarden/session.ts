@@ -84,11 +84,14 @@ function persistWorld(session: ActiveSession, tick: number, terminal: boolean) {
     }).catch(() => {})
 }
 
+export async function flushPathwardenSessionForUser(userId: string) {
+    const active = [...sessions.values()].find(session => session.userId === userId)
+    if (active?.persistPromise) await active.persistPromise
+}
+
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
     if (!session.world.canApply(command)) {
-        const reason = command.type === 'place-tower'
-            ? 'Placement authority is not enabled in this migration slice'
-            : 'Command is not valid in the current Pathwarden phase'
+        const reason = 'Command is not valid in the current Pathwarden state'
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, reason))
         return
     }
@@ -160,6 +163,7 @@ export function closePathwardenSession(peer: Peer) {
     for (const [runId, session] of sessions) {
         if (session.peer === peer) {
             session.world.stop()
+            void session.persistPromise
             sessions.delete(runId)
         }
     }
