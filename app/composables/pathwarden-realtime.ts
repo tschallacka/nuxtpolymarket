@@ -5,10 +5,10 @@ import {
     encodeInputCommand,
     PathwardenPacketKind,
     type PathwardenInputCommand,
-    type PathwardenWorldSnapshot
+    type PathwardenWorldSnapshot,
+    type PathwardenEntityState
 } from '#shared/pathwarden/protocol'
 import type { PathwardenMapPlan } from '#shared/types/pathwarden-save'
-import type { PathwardenEntityState } from '#shared/pathwarden/protocol'
 
 export type PathwardenRealtimeStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -39,7 +39,7 @@ export function usePathwardenRealtime() {
     let intentionalClose = false
 
     function reconcile(serverSnapshot: PathwardenWorldSnapshot) {
-        let next = { ...serverSnapshot }
+        const next = { ...serverSnapshot }
         for (const command of pending.values()) {
             if (command.type === 'pause' && !next.paused && command.value) next.paused = true
             if (command.type === 'pause' && next.paused && !command.value) next.paused = false
@@ -59,6 +59,12 @@ export function usePathwardenRealtime() {
                 const wasDifferent = snapshot.value && (snapshot.value.tick > next.tick || snapshot.value.phase !== next.phase || snapshot.value.wave !== next.wave)
                 if (wasDifferent) corrections.value += 1
                 snapshot.value = next
+                const expectedChoiceKind = next.phase === 'checkpoint'
+                    ? 'checkpoint'
+                    : next.phase === 'path'
+                        ? 'path'
+                        : next.phase === 'upgrade' ? 'relic' : null
+                if (!expectedChoiceKind || choiceOffer.value?.kind !== expectedChoiceKind) choiceOffer.value = null
                 lastAcknowledgedInput.value = Math.max(lastAcknowledgedInput.value, packet.header.acknowledgedInput)
                 for (const inputSequence of pending.keys()) {
                     if (inputSequence <= packet.header.acknowledgedInput) pending.delete(inputSequence)

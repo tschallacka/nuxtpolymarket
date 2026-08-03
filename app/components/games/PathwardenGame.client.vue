@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   PathwardenEngine,
+  PATHWARDEN_RELICS,
   type PathwardenInventoryRelic,
   type PathwardenEngineRestore,
   type PathwardenRelic,
@@ -1171,6 +1172,14 @@ watch(realtime.mapPlan, mapPlan => {
 
 watch(realtime.entities, entities => {
   engine?.applyAuthoritativeEntities(entities)
+})
+
+watch(realtime.choiceOffer, offer => {
+  if (!offer || offer.kind !== 'relic') return
+  const serverRelicIds = ['fire-common', 'frost-common', 'bounty-common']
+  upgradeChoices.value = offer.choices
+    .map(choice => PATHWARDEN_RELICS.find(relic => relic.id === serverRelicIds[choice]))
+    .filter((relic): relic is PathwardenRelic => Boolean(relic))
 })
 
 onBeforeUnmount(() => {
