@@ -140,4 +140,19 @@ describe('Pathwarden authoritative world', () => {
         expect(world.getEntities()[0]!.data.components?.level).toBe(2)
         expect(world.canApply({ type: 'salvage-tower', id: tower.id })).toBe(true)
     })
+
+    it('keeps relic inventory and binding on the server entity graph', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-7', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const towerId = world.spawnEntity({ type: 1, components: { towerType: 'bolt', col: 10, row: 10 } }, 10, 10)
+        const relicId = world.spawnEntity({ type: 5, components: { instanceId: 8, relicId: 'fire-common', family: 'fire', power: 1, sellValue: 15 } }, 0, 0)
+        expect(world.canApply({ type: 'bind-relic', towerId, instanceId: relicId })).toBe(true)
+        world.enqueue(1, { type: 'bind-relic', towerId, instanceId: relicId })
+        world.start()
+        vi.advanceTimersByTime(50)
+        world.stop()
+        const tower = world.getEntities().find(entity => entity.id === towerId)!
+        expect(tower.data.components).toMatchObject({ relicFamily: 'fire', relicStacks: 1, relicPower: 1 })
+        expect(world.getEntities().some(entity => entity.id === relicId)).toBe(false)
+    })
 })
