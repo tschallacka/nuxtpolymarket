@@ -168,6 +168,7 @@ export class PathwardenWorld {
             this.globalRelics[family] = { level: Number(relic.level ?? 0), power: Number(relic.power ?? 0), effects, color: relic.color }
             this.addEffects(this.globalRelicEffects, effects)
         }
+        this.refreshGlobalRelicPower()
         this.lastInputSequence = Math.max(0, Math.floor(source.gameState?.lastInputSequence ?? 0))
         this.towerPurchases = { ...(source.gameState?.towerPurchases ?? {}) }
         this.selectedTower = source.gameState?.selectedTower ?? 'bolt'
@@ -662,9 +663,7 @@ export class PathwardenWorld {
         }
         if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
             if (!this.canApply(command)) return false
-            this.state.aether += command.choice * 10
             if (command.type === 'relic-choice') {
-                this.state.relicPower = Math.min(5, this.state.relicPower + (command.choice + 1) * 0.1)
                 const relicId = this.choiceKeys[command.choice]
                 const definition = relicId ? pathwardenRelicDefinition(relicId) : undefined
                 if (!definition) return false
@@ -691,6 +690,7 @@ export class PathwardenWorld {
                         color: definition.color
                     }
                     this.addEffects(this.globalRelicEffects, definition.effects)
+                    this.refreshGlobalRelicPower()
                     if (definition.family === 'heart') {
                         const hearts = Math.max(1, Math.round(3 * definition.power))
                         this.maxLives += hearts
@@ -1010,11 +1010,15 @@ export class PathwardenWorld {
         return target
     }
 
+    private refreshGlobalRelicPower() {
+        this.state.relicPower = Object.values(this.globalRelics).reduce((total, relic) => total + relic.power, 0)
+    }
+
     private towerDamage(type: string, level: number, relicPower = 0, relicFamily = '') {
         const base = PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25
         const levelPower = level >= 3 ? 3.35 : level >= 2 ? 1.85 : 1
         const effects = this.relicEffects(relicFamily, relicPower)
-        return base * levelPower * (1 + this.state.relicPower + Math.max(0, relicPower) + effects.directDamagePct / 100)
+        return base * levelPower * (1 + (this.globalRelicEffects.directDamagePct + effects.directDamagePct) / 100)
     }
 
     private spawnRelic(relic: PathwardenSavedRelic) {

@@ -413,6 +413,7 @@ describe('Pathwarden authoritative world', () => {
             sellValue: selected.sellValue,
             color: selected.color
         })
+        expect(world.getSnapshot().aether).toBe(205)
     })
 
     it('applies bounded chain targets and impact damage on the authoritative projectile tick', () => {
@@ -481,5 +482,6 @@ describe('Pathwarden authoritative world', () => {
         expect(saved.lives).toBe(23)
         expect(saved.globalRelics.heart).toMatchObject({ level: 1, power: 1 })
         expect(saved.relicInventory).toHaveLength(0)
+        expect(world.getSnapshot().aether).toBe(205)
     })
 })
