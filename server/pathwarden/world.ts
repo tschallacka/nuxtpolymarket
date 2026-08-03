@@ -5,6 +5,7 @@ import type {
     PathwardenPhase,
     PathwardenWorldSnapshot
 } from '#shared/pathwarden/protocol'
+import { hashPathwardenState, recordPathwardenReplay } from '#server/pathwarden/replay'
 
 export interface PathwardenWorldSource {
     runId: string
@@ -49,6 +50,7 @@ export class PathwardenWorld {
     private readonly commands: QueuedCommand[] = []
     private readonly entities = new Map<number, PathwardenEntity>()
     private readonly mapPlan: PathwardenMapPlan
+    private readonly runId: string
     private readonly claimedRooms = new Set<string>()
     private readonly revealed = new Set<string>()
     private readonly reservedRoads = new Set<string>()
@@ -76,6 +78,7 @@ export class PathwardenWorld {
     private onTickMetrics: (durationMs: number) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
+        this.runId = source.runId
         this.mapPlan = source.mapPlan
         const claimed = new Set(source.gameState?.claimedRoomIds ?? [])
         this.claimedRooms.add(this.mapPlan.castleRoomId)
@@ -389,16 +392,24 @@ export class PathwardenWorld {
         this.state.tick += 1
         this.batching = true
         const commands = this.commands.splice(0)
+        const replayCommands: Array<{ inputSequence: number, command: PathwardenInputCommand, accepted: boolean }> = []
         let changed = commands.length > 0
         for (const queued of commands) {
             if (queued.inputSequence <= this.lastInputSequence) continue
             this.lastInputSequence = queued.inputSequence
-            if (!this.canApply(queued.command)) continue
-            changed = this.apply(queued.command) || changed
+            const accepted = this.canApply(queued.command)
+            if (accepted) changed = this.apply(queued.command) || changed
+            replayCommands.push({ inputSequence: queued.inputSequence, command: queued.command, accepted })
         }
         this.simulateWave()
         this.simulateAmbient()
         this.batching = false
+        const stateHash = hashPathwardenState(this.getSnapshot(), this.getEntities())
+        for (const replayCommand of replayCommands) recordPathwardenReplay(this.runId, {
+            tick: this.state.tick,
+            ...replayCommand,
+            stateHash
+        })
         if (changed || this.dirty || this.state.tick % 10 === 0) this.notifyChange()
         else this.dirty = false
         this.onTickMetrics(Math.max(0, Date.now() - startedAt))
