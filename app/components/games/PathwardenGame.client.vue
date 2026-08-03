@@ -693,6 +693,7 @@ async function ensureRunStarted() {
         seed: engine?.exportMapPlan().seed
       }
     })
+    if (!response.run) return false
     runActive.value = true
     activeRunId.value = response.run.id
     engine?.setServerAuthoritative()
@@ -1173,7 +1174,7 @@ watch(realtime.snapshot, authoritative => {
 })
 
 watch(realtime.mapPlan, mapPlan => {
-  if (mapPlan) engine?.applyAuthoritativeMapPlan(mapPlan)
+  if (mapPlan) engine?.applyAuthoritativeMapPlan(mapPlan as PathwardenMapPlan)
 })
 
 watch(realtime.entities, entities => {

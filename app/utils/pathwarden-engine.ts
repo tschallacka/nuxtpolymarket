@@ -1207,8 +1207,8 @@ export class PathwardenEngine {
     streak?: number
     flawlessWaves?: number
     paused: boolean
-    claimedRoomIds?: string[]
-    revealedCells?: Array<{ col: number, row: number }>
+    claimedRoomIds?: readonly string[]
+    revealedCells?: ReadonlyArray<{ col: number, row: number }>
   }) {
     if (this.destroyed) return
     this.phase = authoritative.phase as PathwardenPhase
@@ -1225,7 +1225,7 @@ export class PathwardenEngine {
     this.emitState()
   }
 
-  private applyAuthoritativeMapState(claimedRoomIds: string[], revealedCells: Array<{ col: number, row: number }>) {
+  private applyAuthoritativeMapState(claimedRoomIds: readonly string[], revealedCells: ReadonlyArray<{ col: number, row: number }>) {
     const claimed = new Set(claimedRoomIds)
     this.claimedSections = new Set(this.plannedSections.filter(section => claimed.has(section.roomId ?? section.id)))
     this.branchRoads = []
@@ -1274,7 +1274,7 @@ export class PathwardenEngine {
     this.authoritativeChoiceRevision = Math.max(0, Math.floor(revision))
   }
 
-  applyAuthoritativeEntities(entities: PathwardenEntityState[]) {
+  applyAuthoritativeEntities(entities: readonly PathwardenEntityState[]) {
     if (this.destroyed) return
     this.serverAuthoritative = true
     const enemyVisual: Record<EnemyType, { radius: number, color: string }> = {
