@@ -1,9 +1,37 @@
-export const PATHWARDEN_BOOST_IDS = ['bulwark', 'artificer', 'lens', 'reservoir', 'banner', 'bounty'] as const
+export const PATHWARDEN_BOOST_IDS = ['bulwark', 'artificer', 'lens', 'reservoir', 'banner', 'bounty', 'arcanist'] as const
 export type PathwardenBoostId = typeof PATHWARDEN_BOOST_IDS[number]
 export type PathwardenBoostCurrency = 'coins' | 'gems'
 export type PathwardenBoostLevels = Record<PathwardenBoostId, number>
 export const PATHWARDEN_CHECKPOINT_WAVES = [4, 8, 12] as const
+export const PATHWARDEN_ABANDON_COST_GEMS = 3
 export const PATHWARDEN_SURGE_COST_GEMS = 5
+export const PATHWARDEN_MAX_WAVE = 12
+export const PATHWARDEN_AMBIENT_STORY_COUNT = 250
+
+// Ambient stories surface on a 45-300s in-game timer, so a real player never
+// records two within 20s. Enforcing that floor server-side turns the "POST
+// storyId 1..250 in a loop" forge into a many-hour grind against an active run.
+export const PATHWARDEN_AMBIENT_MIN_INTERVAL_MS = 20_000
+
+// A real march spends most of its wall-clock spawning and clearing enemies:
+// spawn timing alone forces well over two minutes for a full 12-wave victory.
+// This floor is deliberately far below honest play (so it never rejects a real
+// run) yet far above a scripted finish, and it is what caps every wave-derived
+// payout against the clock. The client can claim no more waves than the elapsed
+// time plausibly allows.
+export const PATHWARDEN_MIN_SECONDS_PER_WAVE = 8
+
+/** Highest wave the elapsed wall-clock could plausibly have reached. */
+export function pathwardenMaxWaveForElapsedMs(elapsedMs: number) {
+    if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0
+    return Math.floor(elapsedMs / 1000 / PATHWARDEN_MIN_SECONDS_PER_WAVE)
+}
+
+/** Plausible score ceiling for a run, scaled by the waves actually reached. */
+export function pathwardenMaxScore(wave: number, realm: number) {
+    const boundedWave = Math.max(0, Math.min(PATHWARDEN_MAX_WAVE, Math.floor(wave)))
+    return Math.round(50_000_000 * Math.max(1, realm) * (boundedWave / PATHWARDEN_MAX_WAVE))
+}
 
 export type PathwardenDefenseArchetype = 'ballista' | 'mortar' | 'spire'
 export type PathwardenDefenseFamily = 'star' | 'sun' | 'winter' | 'ember' | 'storm' | 'dawn' | 'venom' | 'gale' | 'prism' | 'siege'
@@ -172,6 +200,14 @@ export const PATHWARDEN_BOOSTS: Record<PathwardenBoostId, {
         baseCost: 5,
         maxLevel: 10,
         sprite: { col: 2, row: 1 }
+    },
+    arcanist: {
+        name: 'Arcanist’s Workbench',
+        description: 'Improves relic swaps: same-family binding, different-family binding, and preserving the displaced relic.',
+        currency: 'coins',
+        baseCost: 48_000,
+        maxLevel: 20,
+        sprite: { col: 2, row: 0 }
     }
 }
 
@@ -191,7 +227,8 @@ export function pathwardenBoostEffects(levels: PathwardenBoostLevels, surged = f
         damageMultiplier: (1 + levels.artificer * 0.03) * surge,
         rangeMultiplier: 1 + levels.lens * 0.03,
         rateMultiplier: (1 + levels.banner * 0.02) * (surged ? 1.05 : 1),
-        bountyMultiplier: 1 + levels.bounty * 0.03
+        bountyMultiplier: 1 + levels.bounty * 0.03,
+        arcanistLevel: levels.arcanist
     }
 }
 
@@ -203,6 +240,7 @@ export function pathwardenPower(levels: PathwardenBoostLevels) {
         + levels.reservoir * 3
         + levels.banner * 4
         + levels.bounty * 3
+        + levels.arcanist * 5
 }
 
 export function pathwardenCheckpointRate(wave: number, realm: number) {
@@ -215,13 +253,23 @@ export function pathwardenCheckpointRate(wave: number, realm: number) {
 export function pathwardenCheckpointBaseCoins(wave: number, realm: number) {
     const checkpoint = wave >= 12 ? 3 : wave >= 8 ? 2 : wave >= 4 ? 1 : 0
     if (!checkpoint) return 0
-    const base = [0, 4_000, 25_000, 125_000][checkpoint]!
+    const base = [0, 75_000, 150_000, 300_000][checkpoint]!
     return Math.round(base * (1 + (Math.max(1, realm) - 1) * 0.5))
 }
 
-export function pathwardenCashoutCoins(aether: number, wave: number, realm: number) {
+/** Guaranteed account reward for reaching a checkpoint. Realm difficulty scales this payout. */
+export function pathwardenCheckpointReward(wave: number, realm: number) {
+    return pathwardenCheckpointBaseCoins(wave, realm)
+}
+
+/** Optional bonus from converting the Aether carried into a checkpoint. */
+export function pathwardenAetherCashoutBonus(aether: number, wave: number, realm: number) {
     const boundedAether = Math.max(0, Math.floor(Number.isFinite(aether) ? aether : 0))
-    return pathwardenCheckpointBaseCoins(wave, realm) + boundedAether * pathwardenCheckpointRate(wave, realm)
+    return boundedAether * pathwardenCheckpointRate(wave, realm)
+}
+
+export function pathwardenCashoutCoins(aether: number, wave: number, realm: number) {
+    return pathwardenCheckpointReward(wave, realm) + pathwardenAetherCashoutBonus(aether, wave, realm)
 }
 
 /** Client reports are capped generously; debug Aether can never become real coins. */
