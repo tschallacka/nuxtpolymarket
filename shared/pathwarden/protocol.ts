@@ -73,11 +73,11 @@ export type PathwardenInputCommand =
     | { type: 'move-tower', id: number, col: number, row: number }
     | { type: 'set-targeting', id: number, targeting: 'first' | 'strong' | 'fast' }
     | { type: 'continue-checkpoint' }
-    | { type: 'claim-path', choice: number }
+    | { type: 'claim-path', choice: number, offerRevision?: number }
     | { type: 'sell-relic', instanceId: number }
     | { type: 'bind-relic', towerId: number, instanceId: number }
-    | { type: 'checkpoint-choice', choice: number }
-    | { type: 'relic-choice', choice: number }
+    | { type: 'checkpoint-choice', choice: number, offerRevision?: number }
+    | { type: 'relic-choice', choice: number, offerRevision?: number }
 
 export interface PathwardenDecodedPacket {
     header: PathwardenPacketHeader
@@ -446,10 +446,11 @@ export function encodeEntitySnapshot(entities: PathwardenEntityState[], header: 
     return encodePacket({ kind: PathwardenPacketKind.EntitySnapshot, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
-export function encodeChoiceOffer(kind: 'checkpoint' | 'relic' | 'path', choices: number[], header: Partial<PathwardenPacketHeader> = {}) {
+export function encodeChoiceOffer(kind: 'checkpoint' | 'relic' | 'path', choices: number[], header: Partial<PathwardenPacketHeader> = {}, offerRevision = 0) {
     if (choices.length > 8) throw new Error('Pathwarden choice count exceeds protocol limit')
     const payload = new ByteWriter()
     payload.u8(kind === 'checkpoint' ? 1 : kind === 'relic' ? 2 : 3)
+    payload.u32(offerRevision)
     payload.varUint(choices.length)
     for (const choice of choices) payload.varUint(choice)
     return encodePacket({ kind: PathwardenPacketKind.ChoiceOffer, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
@@ -487,13 +488,19 @@ export function encodeInputCommand(inputSequence: number, command: PathwardenInp
         payload.varUint(command.id)
         payload.u8(command.targeting === 'first' ? 1 : command.targeting === 'strong' ? 2 : 3)
     }
-    if (command.type === 'claim-path') payload.varUint(command.choice)
+    if (command.type === 'claim-path') {
+        payload.varUint(command.choice)
+        payload.varUint(command.offerRevision ?? 0)
+    }
     if (command.type === 'sell-relic') payload.varUint(command.instanceId)
     if (command.type === 'bind-relic') {
         payload.varUint(command.towerId)
         payload.varUint(command.instanceId)
     }
-    if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') payload.varUint(command.choice)
+    if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
+        payload.varUint(command.choice)
+        payload.varUint(command.offerRevision ?? 0)
+    }
     return encodePacket({ kind: PathwardenPacketKind.InputCommand, flags: 0, schema: 1, sequence: inputSequence, tick: desiredTick, acknowledgedInput: 0 }, payload.finish())
 }
 
@@ -552,15 +559,15 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
                                             : type === 10
                                             ? { inputSequence, desiredTick, command: { type: 'continue-checkpoint' } }
                                             : type === 11
-                                                ? { inputSequence, desiredTick, command: { type: 'claim-path', choice: payloadReader.varUint() } }
+                                                ? { inputSequence, desiredTick, command: { type: 'claim-path', choice: payloadReader.varUint(), offerRevision: payloadReader.varUint() } }
                                                 : type === 12
                                                     ? { inputSequence, desiredTick, command: { type: 'sell-relic', instanceId: payloadReader.varUint() } }
                                                 : type === 13
                                                     ? { inputSequence, desiredTick, command: { type: 'bind-relic', towerId: payloadReader.varUint(), instanceId: payloadReader.varUint() } }
                                                     : type === 14
-                            ? { inputSequence, desiredTick, command: { type: 'checkpoint-choice', choice: payloadReader.varUint() } }
+                            ? { inputSequence, desiredTick, command: { type: 'checkpoint-choice', choice: payloadReader.varUint(), offerRevision: payloadReader.varUint() } }
                             : type === 15
-                                ? { inputSequence, desiredTick, command: { type: 'relic-choice', choice: payloadReader.varUint() } }
+                                ? { inputSequence, desiredTick, command: { type: 'relic-choice', choice: payloadReader.varUint(), offerRevision: payloadReader.varUint() } }
                         : null
     } else if (header.kind === PathwardenPacketKind.CommandAck || header.kind === PathwardenPacketKind.CommandReject) {
         payload = { inputSequence: payloadReader.varUint(), accepted: payloadReader.bool(), reason: payloadReader.string(160) }
@@ -590,10 +597,12 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
         }))
     } else if (header.kind === PathwardenPacketKind.ChoiceOffer) {
         const kind = payloadReader.u8()
+        const offerRevision = payloadReader.u32()
         const count = payloadReader.varUint()
         if (count > 8) throw new Error('Pathwarden choice count exceeds protocol limit')
         payload = {
             kind: kind === 1 ? 'checkpoint' : kind === 2 ? 'relic' : 'path',
+            offerRevision,
             choices: Array.from({ length: count }, () => payloadReader.varUint())
         }
     }

@@ -792,6 +792,7 @@ export class PathwardenEngine {
   private enemies: Enemy[] = []
   private projectiles: Projectile[] = []
   private serverAuthoritative = false
+  private authoritativeChoiceRevision = 0
   private particles: Particle[] = []
   private floatingTexts: FloatingText[] = []
   private failedPlacement: FailedPlacement | null = null
@@ -1267,6 +1268,10 @@ export class PathwardenEngine {
 
   setServerAuthoritative(enabled = true) {
     this.serverAuthoritative = enabled
+  }
+
+  setAuthoritativeChoiceRevision(revision: number) {
+    this.authoritativeChoiceRevision = Math.max(0, Math.floor(revision))
   }
 
   applyAuthoritativeEntities(entities: PathwardenEntityState[]) {
@@ -3969,7 +3974,7 @@ export class PathwardenEngine {
 
   private extendPath(choice: PathChoice) {
     if (this.phase !== 'path' || !this.pathChoices.includes(choice)) return
-    this.callbacks.onCommand?.({ type: 'claim-path', choice: this.pathChoices.indexOf(choice) })
+    this.callbacks.onCommand?.({ type: 'claim-path', choice: this.pathChoices.indexOf(choice), offerRevision: this.authoritativeChoiceRevision })
     if (this.serverAuthoritative) return
     this.persistCurrentPathLinks()
     const links = choice.links ?? choice.cells.map((cell, index) => ({

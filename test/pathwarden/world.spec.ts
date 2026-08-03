@@ -242,4 +242,13 @@ describe('Pathwarden authoritative world', () => {
         expect(Number(ambient!.data.components?.duration)).toBeGreaterThanOrEqual(1800)
         expect(Number(ambient!.data.components?.duration)).toBeLessThanOrEqual(6000)
     })
+
+    it('rejects stale choice offer revisions', () => {
+        const source = new PathwardenWorld({ runId: 'run-13', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const saved = source.exportGameState()
+        saved.phase = 'checkpoint'
+        const world = new PathwardenWorld({ runId: 'run-13', revision: 0, realm: 1, seed: 1, mapPlan, gameState: saved })
+        expect(world.canApply({ type: 'checkpoint-choice', choice: 1, offerRevision: 0 })).toBe(false)
+        expect(world.canApply({ type: 'checkpoint-choice', choice: 1, offerRevision: 1 })).toBe(true)
+    })
 })

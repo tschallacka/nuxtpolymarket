@@ -67,6 +67,7 @@ export class PathwardenWorld {
     private nextAmbientStoryId = 1
     private nextRelicInstanceId = 1
     private choiceKind: 'checkpoint' | 'relic' | 'path' | null = null
+    private choiceRevision = 0
     private choices: number[] = []
     private batching = false
     private dirty = false
@@ -127,6 +128,7 @@ export class PathwardenWorld {
         if (this.state.phase === 'checkpoint') {
             this.choiceKind = 'checkpoint'
             this.choices = [0, 1, 2]
+            this.choiceRevision = 1
         } else if (this.state.phase === 'path') {
             this.openNextChoice()
         } else if (this.state.phase === 'upgrade') {
@@ -206,18 +208,18 @@ export class PathwardenWorld {
         if (command.type === 'move-tower') return this.validateMove(command)
         if (command.type === 'set-targeting') return this.validateTargeting(command)
         if (command.type === 'continue-checkpoint') return this.state.phase === 'checkpoint'
-        if (command.type === 'claim-path') return this.state.phase === 'path' && this.choiceKind === 'path' && this.choices.includes(command.choice)
+        if (command.type === 'claim-path') return this.state.phase === 'path' && this.choiceKind === 'path' && command.offerRevision === this.choiceRevision && this.choices.includes(command.choice)
         if (command.type === 'sell-relic') return this.state.phase !== 'wave' && this.state.phase !== 'checkpoint' && this.entities.get(command.instanceId)?.data.type === 5
         if (command.type === 'bind-relic') return this.validateRelicBinding(command)
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
-        if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && this.choices.includes(command.choice)
-        if (command.type === 'relic-choice') return this.choiceKind === 'relic' && this.choices.includes(command.choice)
+        if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && command.offerRevision === this.choiceRevision && this.choices.includes(command.choice)
+        if (command.type === 'relic-choice') return this.choiceKind === 'relic' && command.offerRevision === this.choiceRevision && this.choices.includes(command.choice)
         return command.type === 'select-tower' && PATHWARDEN_DEFENSE_BLUEPRINTS.some(defense => defense.id === command.tower)
     }
 
     getChoiceOffer() {
-        return this.choiceKind ? { kind: this.choiceKind, choices: [...this.choices] } : null
+        return this.choiceKind ? { kind: this.choiceKind, choices: [...this.choices], offerRevision: this.choiceRevision } : null
     }
 
     getSnapshot() {
@@ -776,6 +778,7 @@ export class PathwardenWorld {
         this.state.phase = 'upgrade'
         this.choiceKind = 'relic'
         this.choices = [0, 1, 2]
+        this.choiceRevision++
     }
 
     private openNextChoice() {
@@ -784,6 +787,7 @@ export class PathwardenWorld {
             this.state.phase = 'path'
             this.choiceKind = 'path'
             this.choices = paths.map((_, index) => index)
+            this.choiceRevision++
         } else this.openRelicChoice()
     }
 

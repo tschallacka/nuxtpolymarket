@@ -789,7 +789,7 @@ async function abandonRun(currency: 'gems' | 'coins') {
 
 function chooseUpgrade(upgrade: PathwardenRelic) {
   if (activeRunId.value) {
-    realtime.send({ type: 'relic-choice', choice: upgradeChoices.value.indexOf(upgrade) })
+    realtime.send({ type: 'relic-choice', choice: upgradeChoices.value.indexOf(upgrade), offerRevision: realtime.choiceOffer.value?.offerRevision })
     upgradeChoices.value = []
     return
   }
@@ -1175,7 +1175,9 @@ watch(realtime.entities, entities => {
 })
 
 watch(realtime.choiceOffer, offer => {
-  if (!offer || offer.kind !== 'relic') return
+  if (!offer) return
+  engine?.setAuthoritativeChoiceRevision(offer.offerRevision)
+  if (offer.kind !== 'relic') return
   const serverRelicIds = ['fire-common', 'frost-common', 'bounty-common']
   upgradeChoices.value = offer.choices
     .map(choice => PATHWARDEN_RELICS.find(relic => relic.id === serverRelicIds[choice]))

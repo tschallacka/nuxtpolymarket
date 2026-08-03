@@ -121,14 +121,14 @@ describe('Pathwarden binary gameplay protocol', () => {
     })
 
     it('round-trips bounded server choice offers and choice commands', () => {
-        const offer = decodePacket(encodeChoiceOffer('checkpoint', [0, 1, 2]))
-        expect(offer.payload).toEqual({ kind: 'checkpoint', choices: [0, 1, 2] })
-        const command = decodePacket(encodeInputCommand(4, { type: 'checkpoint-choice', choice: 2 }))
-        expect(command.payload).toMatchObject({ command: { type: 'checkpoint-choice', choice: 2 } })
-        const pathOffer = decodePacket(encodeChoiceOffer('path', [0, 1, 2]))
-        expect(pathOffer.payload).toEqual({ kind: 'path', choices: [0, 1, 2] })
-        const pathCommand = decodePacket(encodeInputCommand(5, { type: 'claim-path', choice: 1 }))
-        expect(pathCommand.payload).toMatchObject({ command: { type: 'claim-path', choice: 1 } })
+        const offer = decodePacket(encodeChoiceOffer('checkpoint', [0, 1, 2], {}, 7))
+        expect(offer.payload).toEqual({ kind: 'checkpoint', offerRevision: 7, choices: [0, 1, 2] })
+        const command = decodePacket(encodeInputCommand(4, { type: 'checkpoint-choice', choice: 2, offerRevision: 7 }))
+        expect(command.payload).toMatchObject({ command: { type: 'checkpoint-choice', choice: 2, offerRevision: 7 } })
+        const pathOffer = decodePacket(encodeChoiceOffer('path', [0, 1, 2], {}, 8))
+        expect(pathOffer.payload).toEqual({ kind: 'path', offerRevision: 8, choices: [0, 1, 2] })
+        const pathCommand = decodePacket(encodeInputCommand(5, { type: 'claim-path', choice: 1, offerRevision: 8 }))
+        expect(pathCommand.payload).toMatchObject({ command: { type: 'claim-path', choice: 1, offerRevision: 8 } })
     })
 
     it('round-trips building commands with compact numeric payloads', () => {

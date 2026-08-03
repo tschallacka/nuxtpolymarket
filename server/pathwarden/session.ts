@@ -158,7 +158,7 @@ export async function openPathwardenSession(peer: Peer) {
         })), { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
         send(session, encodeWorldSnapshot(snapshot, { sequence: session.nextPacketSequence++, acknowledgedInput: session.world.lastAppliedInput }))
         const offer = session.world.getChoiceOffer()
-        if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: snapshot.tick }))
+        if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: snapshot.tick }, offer.offerRevision))
         persistWorld(session, snapshot.tick, snapshot.phase === 'victory' || snapshot.phase === 'defeat' || snapshot.phase === 'cashout')
     })
     session.world.setAmbientStoryHandler(storyId => {
@@ -183,7 +183,7 @@ export async function openPathwardenSession(peer: Peer) {
     })), { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }))
     send(session, encodeWorldSnapshot(session.world.getSnapshot(), { sequence: session.nextPacketSequence++ }))
     const offer = session.world.getChoiceOffer()
-    if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }))
+    if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }, offer.offerRevision))
     session.world.start()
 }
 
