@@ -984,7 +984,10 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
       await settleRun(won ? 'victory' : 'defeat')
     },
     onCommand: (command: PathwardenInputCommand) => {
-      if (activeRunId.value) realtime.send(command)
+      void (async () => {
+        if (!activeRunId.value && !await ensureRunStarted()) return
+        realtime.send(command)
+      })()
     }
   }, boostState.value
     ? pathwardenBoostEffects(boostState.value.levels, useSurge.value)

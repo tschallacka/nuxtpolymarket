@@ -25,6 +25,7 @@ describe('Pathwarden authority boundaries', () => {
         expect(componentSource).not.toContain("method: 'PUT', body: { revision")
         expect(componentSource).not.toContain("'/api/pathwarden/ambient'")
         expect(componentSource).toContain('engine.setServerAuthoritative()')
+        expect(componentSource).toContain('if (!activeRunId.value && !await ensureRunStarted()) return')
         expect(debugClearCacheSource).toContain('closePathwardenSessionsForUser')
         const authoritativePlacement = engineSource.indexOf("if (this.serverAuthoritative && this.phase === 'planning')")
         const localPlacementValidation = engineSource.indexOf('const placement = this.placementStatus(cell)')
