@@ -132,6 +132,7 @@ export class PathwardenWorld {
         if (command.type === 'salvage-tower') return this.validateTower(command.id, 'salvage')
         if (command.type === 'move-tower') return this.validateMove(command)
         if (command.type === 'set-targeting') return this.validateTargeting(command)
+        if (command.type === 'continue-checkpoint') return this.state.phase === 'checkpoint'
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
         if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && this.choices.includes(command.choice)
@@ -343,12 +344,22 @@ export class PathwardenWorld {
             this.updateEntity(command.id, { data: { type: 1, components: { ...tower.data.components, targeting: command.targeting } } })
             return true
         }
+        if (command.type === 'continue-checkpoint') {
+            if (this.state.wave >= 12) {
+                this.state.phase = 'victory'
+                return true
+            }
+            this.state.phase = 'upgrade'
+            this.choiceKind = 'relic'
+            this.choices = [0, 1, 2]
+            return true
+        }
         if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
             if (!this.canApply(command)) return false
             this.state.aether += command.choice * 10
             this.choiceKind = null
             this.choices = []
-            this.state.phase = 'planning'
+            this.state.phase = command.type === 'relic-choice' ? 'planning' : 'planning'
             return true
         }
         const placement = this.validatePlacement(command)
@@ -405,7 +416,9 @@ export class PathwardenWorld {
                 this.choiceKind = 'checkpoint'
                 this.choices = [0, 1, 2]
             } else {
-                this.state.phase = 'planning'
+                this.state.phase = 'upgrade'
+                this.choiceKind = 'relic'
+                this.choices = [0, 1, 2]
             }
         }
     }

@@ -783,6 +783,7 @@ async function abandonRun(currency: 'gems' | 'coins') {
 }
 
 function chooseUpgrade(upgrade: PathwardenRelic) {
+  if (activeRunId.value) realtime.send({ type: 'relic-choice', choice: upgradeChoices.value.indexOf(upgrade) })
   upgradeChoices.value = []
   engine?.chooseUpgrade(upgrade)
 }
@@ -975,6 +976,7 @@ async function cashOut() {
 
 async function continueCheckpoint() {
   await claimCheckpointReward(snapshot.value.wave)
+  if (activeRunId.value) realtime.send({ type: 'continue-checkpoint' })
   engine?.continueCheckpoint()
 }
 
