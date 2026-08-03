@@ -571,10 +571,20 @@ export class PathwardenWorld {
             const components = enemy.data.components ?? {}
             const slowTimer = Math.max(0, Number(components.slowTimer ?? 0) - 1)
             const slow = slowTimer > 0 ? Math.max(0, Number(components.slow ?? 0)) : 0
-            const progress = Number(components.progress ?? 0) + 0.012 * (1 - Math.min(0.8, slow))
+            const enemyType = String(components.enemyType ?? 'raider')
+            const healTimer = Math.max(0, Number(components.healTimer ?? 44) - 1)
+            if (enemyType === 'shaman' && healTimer === 0) {
+                for (const ally of this.getEntities().filter(candidate => candidate.data.type === 2 && candidate.id !== enemy.id)) {
+                    const allyComponents = ally.data.components ?? {}
+                    const maxHp = Number(allyComponents.maxHp ?? 1)
+                    const hp = Math.min(maxHp, Number(allyComponents.hp ?? maxHp) + maxHp * 0.08)
+                    this.updateEntity(ally.id, { data: { type: 2, components: { ...allyComponents, hp } } })
+                }
+            }
+            const progress = Number(components.progress ?? 0) + 0.012 * Number(components.speed ?? 1) * (1 - Math.min(0.8, slow))
             if (progress >= 1) {
                 this.removeEntity(enemy.id)
-                this.state.lives = Math.max(0, this.state.lives - 1)
+                this.state.lives = Math.max(0, this.state.lives - Math.max(1, Math.floor(Number(components.leakDamage ?? 1))))
                 this.streak = 0
                 this.state.streak = 0
                 if (this.state.lives === 0) {
@@ -585,7 +595,7 @@ export class PathwardenWorld {
                 continue
             }
             const position = this.routePosition(progress)
-            this.updateEntity(enemy.id, { x: position.col, y: position.row, data: { type: 2, components: { ...components, progress, slow, slowTimer } } })
+            this.updateEntity(enemy.id, { x: position.col, y: position.row, data: { type: 2, components: { ...components, progress, slow, slowTimer, healTimer: enemyType === 'shaman' && healTimer === 0 ? 44 : healTimer } } })
         }
         this.simulateTowers()
         this.simulateProjectiles()
@@ -612,15 +622,33 @@ export class PathwardenWorld {
     private spawnEnemy() {
         const route = this.enemyRoute()
         const start = route[route.length - 1] ?? { col: 80, row: 80 }
-        const hp = 40 + this.state.wave * 12
+        const ordinal = Math.max(0, this.spawnRemaining)
+        const enemyType = this.state.wave % 4 === 0 && this.spawnRemaining === 1
+            ? 'boss'
+            : this.state.wave >= 5 && ordinal % 7 === 0
+                ? 'shaman'
+                : this.state.wave >= 3 && ordinal % 5 === 0
+                    ? 'brute'
+                    : this.state.wave >= 2 && ordinal % 3 === 0 ? 'runner' : 'raider'
+        const profile = {
+            raider: { health: 1, speed: 1, reward: 1, leakDamage: 1 },
+            runner: { health: 0.7, speed: 1.62, reward: 1.2, leakDamage: 1 },
+            brute: { health: 2.5, speed: 0.72, reward: 2.1, leakDamage: 2 },
+            shaman: { health: 1.5, speed: 0.88, reward: 2.4, leakDamage: 1 },
+            boss: { health: 8.5, speed: 0.58, reward: 9, leakDamage: 5 }
+        }[enemyType]
+        const hp = (40 + this.state.wave * 12) * profile.health
         this.spawnEntity({
             type: 2,
             components: {
-                enemyType: this.state.wave >= 5 && this.spawnRemaining % 5 === 0 ? 'brute' : 'raider',
+                enemyType,
                 progress: 0,
                 hp,
                 maxHp: hp,
-                reward: 2 + this.state.wave
+                reward: (2 + this.state.wave) * profile.reward,
+                speed: profile.speed,
+                leakDamage: profile.leakDamage,
+                healTimer: 44
             }
         }, start.col, start.row)
     }

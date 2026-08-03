@@ -220,6 +220,21 @@ describe('Pathwarden authoritative world', () => {
         expect(roadCells).toContainEqual({ col: enemy!.x, row: enemy!.y })
     })
 
+    it('uses the authoritative enemy archetype schedule', () => {
+        vi.useFakeTimers()
+        const source = new PathwardenWorld({ runId: 'run-9b-source', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const saved = source.exportGameState()
+        saved.wave = 3
+        const world = new PathwardenWorld({ runId: 'run-9b', revision: 0, realm: 1, seed: 1, mapPlan, gameState: saved })
+        world.enqueue(1, { type: 'start-wave' })
+        world.start()
+        vi.advanceTimersByTime(50 * 100)
+        const types = new Set(world.getEntities().filter(entity => entity.data.type === 2).map(entity => entity.data.components?.enemyType))
+        world.stop()
+
+        expect([...types]).toEqual(expect.arrayContaining(['runner', 'brute']))
+    })
+
     it('restores active combat entities and wave counters on reconnect', () => {
         const source = new PathwardenWorld({ runId: 'run-10', revision: 2, realm: 1, seed: 1, mapPlan, gameState: null })
         source.spawnEntity({ type: 1, components: { towerType: 'bolt', col: 10, row: 10, invested: 64, level: 2, targeting: 'strong' } }, 10, 10, 0, 0, 0, 0, 10)
