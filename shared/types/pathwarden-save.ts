@@ -268,6 +268,7 @@ export interface PathwardenGameState {
     towerId: number
     enemyId: number
     relicInstanceId: number
+    lastInputSequence?: number
 }
 
 export interface PathwardenRunSave {

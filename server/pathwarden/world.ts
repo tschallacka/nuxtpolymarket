@@ -107,6 +107,7 @@ export class PathwardenWorld {
             paused: source.gameState?.paused === true,
             entityCount: 0
         }
+        this.lastInputSequence = Math.max(0, Math.floor(source.gameState?.lastInputSequence ?? 0))
         for (const tower of source.gameState?.towers ?? []) {
             this.spawnEntity({ type: 1, components: { towerType: tower.type, col: tower.col, row: tower.row, invested: tower.invested } }, tower.col, tower.row)
         }
@@ -274,7 +275,8 @@ export class PathwardenWorld {
             projectiles: [],
             towerId: this.nextEntityId,
             enemyId: this.nextEntityId,
-            relicInstanceId: this.nextRelicInstanceId
+            relicInstanceId: this.nextRelicInstanceId,
+            lastInputSequence: this.lastInputSequence
         }
     }
 

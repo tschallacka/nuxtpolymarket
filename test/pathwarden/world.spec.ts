@@ -72,10 +72,12 @@ describe('Pathwarden authoritative world', () => {
                 projectiles: [],
                 towerId: 1,
                 enemyId: 1,
-                relicInstanceId: 1
+                relicInstanceId: 1,
+                lastInputSequence: 4
             }
         })
         expect(world.getSnapshot()).toMatchObject({ revision: 4, realm: 2, wave: 3, lives: 17, aether: 144, score: 880, paused: true })
+        expect(world.lastAppliedInput).toBe(4)
     })
 
     it('rejects commands outside the current phase before queueing them', () => {

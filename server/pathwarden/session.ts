@@ -94,6 +94,10 @@ export async function flushPathwardenSessionForUser(userId: string) {
 }
 
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
+    if (inputSequence <= session.world.lastAppliedInput) {
+        send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
+        return
+    }
     if (!session.world.canApply(command)) {
         const reason = 'Command is not valid in the current Pathwarden state'
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, reason))
