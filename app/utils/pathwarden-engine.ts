@@ -1193,6 +1193,25 @@ export class PathwardenEngine {
     this.emitState()
   }
 
+  /** Applies the server's latest core state over the local prediction layer. */
+  applyAuthoritativeSnapshot(authoritative: {
+    phase: string
+    wave: number
+    lives: number
+    aether: number
+    score: number
+    paused: boolean
+  }) {
+    if (this.destroyed) return
+    this.phase = authoritative.phase as PathwardenPhase
+    this.wave = Math.max(0, authoritative.wave)
+    this.lives = Math.max(0, authoritative.lives)
+    this.aether = Math.max(0, authoritative.aether)
+    this.score = Math.max(0, authoritative.score)
+    this.paused = authoritative.paused
+    this.emitState()
+  }
+
   selectTower(type: PathwardenTowerType) {
     this.noteActivity()
     this.selectedTowerId = null

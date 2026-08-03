@@ -254,6 +254,7 @@ const hints = computed(() => [
 ])
 const activeHint = computed(() => hints.value[activeHintIndex.value]!)
 const runActive = ref(false)
+const activeRunId = ref<string | null>(null)
 const claimedCheckpointWaves = new Set<number>()
 const checkpointClaims = new Map<number, Promise<void>>()
 const settling = ref(false)
@@ -261,6 +262,7 @@ const rushingCooldown = ref(false)
 const nowMs = ref(Date.now())
 const toast = useToast()
 const { fetchSession } = useAuth()
+const realtime = usePathwardenRealtime()
 const isDev = import.meta.dev
 const devGuidesEnabled = ref(false)
 const selectedIdleStoryId = ref(1)
@@ -514,7 +516,9 @@ function sellRelic(instanceId: number) {
 }
 
 function togglePause() {
-  engine?.togglePause()
+  const nextPaused = !snapshot.value.paused
+  if (realtime.status.value === 'connected') realtime.send({ type: 'pause', value: nextPaused })
+  engine?.setPaused(nextPaused)
 }
 
 function toggleRoadLaboratory() {
@@ -548,6 +552,8 @@ async function clearDebugCache() {
   try {
     await $fetch('/api/pathwarden/debug-clear-cache', { method: 'POST' })
     runActive.value = false
+    activeRunId.value = null
+    realtime.close()
     restoredRun = undefined
     saveRevision = 0
     saveDirty = false
@@ -660,13 +666,14 @@ const simulationChartTooltip = (wave: PathwardenSimulationWaveResult) =>
 async function startWave() {
   upgradeChoices.value = []
   if (!await ensureRunStarted()) return
+  if (realtime.status.value === 'connected') realtime.send({ type: 'start-wave' })
   engine?.startWave()
 }
 
 async function ensureRunStarted() {
   if (runActive.value) return true
   try {
-    await $fetch('/api/pathwarden/start-run', {
+    const response = await $fetch('/api/pathwarden/start-run', {
       method: 'POST',
       body: {
         realm: selectedRealm.value,
@@ -675,6 +682,8 @@ async function ensureRunStarted() {
       }
     })
     runActive.value = true
+    activeRunId.value = response.run.id
+    realtime.connect(response.run.id)
     saveRevision = 0
     scheduleSave()
     await refreshBoosts()
@@ -751,6 +760,8 @@ async function abandonRun(currency: 'gems' | 'coins') {
       body: { currency }
     })
     runActive.value = false
+    activeRunId.value = null
+    realtime.close()
     saveDirty = false
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = null
@@ -924,6 +935,8 @@ async function settleRun(reason: 'cashout' | 'victory' | 'defeat') {
       body: { reason }
     })
     runActive.value = false
+    activeRunId.value = null
+    realtime.close()
     unlockedRealm.value = response.maxUnlockedRealm
     engine?.settleRun(
       response.coins,
@@ -1075,6 +1088,7 @@ onMounted(async () => {
     const response = await $fetch('/api/pathwarden/run')
     if (response.run?.gameState) {
       runActive.value = true
+      activeRunId.value = response.run.id
       saveRevision = response.run.revision
       selectedRealm.value = response.run.realm
       restoredRun = {
@@ -1086,6 +1100,7 @@ onMounted(async () => {
   unlockedRealm.value = boostState.value?.progression.maxUnlockedRealm ?? 1
   if (!restoredRun && skipIntro.value) await createFreshMapWithLoading()
   else createGame(restoredRun)
+  if (activeRunId.value) realtime.connect(activeRunId.value)
   if (import.meta.dev) {
     const { registerPathwardenDevBridge } = await import('~/utils/pathwarden-dev-bridge')
     unregisterDevBridge = registerPathwardenDevBridge({
@@ -1121,10 +1136,15 @@ onMounted(async () => {
   }
 })
 
+watch(realtime.snapshot, authoritative => {
+  if (authoritative) engine?.applyAuthoritativeSnapshot(authoritative)
+})
+
 onBeforeUnmount(() => {
   if (cooldownClock) clearInterval(cooldownClock)
   if (saveTimer) clearTimeout(saveTimer)
   unregisterDevBridge()
+  realtime.close()
   void flushSave()
   engine?.destroy()
 })
