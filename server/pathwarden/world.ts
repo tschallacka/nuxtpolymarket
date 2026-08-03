@@ -1026,8 +1026,7 @@ export class PathwardenWorld {
             iconIndex: relic.iconIndex,
             power: relic.power,
             sellValue: relic.sellValue,
-            color: relic.color ?? '#c4b5fd',
-            effects: relic.effects
+            color: relic.color ?? '#c4b5fd'
         } }, 0, 0)
     }
 

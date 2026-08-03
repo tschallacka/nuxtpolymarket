@@ -411,8 +411,7 @@ describe('Pathwarden authoritative world', () => {
             iconIndex: selected.iconIndex,
             power: selected.power,
             sellValue: selected.sellValue,
-            color: selected.color,
-            effects: selected.effects
+            color: selected.color
         })
     })
 
