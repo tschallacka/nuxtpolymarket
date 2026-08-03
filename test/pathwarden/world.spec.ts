@@ -441,6 +441,18 @@ describe('Pathwarden authoritative world', () => {
         expect(world.getEntities().find(entity => entity.id === untouched)?.data.components?.hp).toBe(100)
     })
 
+    it('applies the pierce bonus against authoritative brute and boss armor classes', () => {
+        const source = new PathwardenWorld({ runId: 'run-pierce-source', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const saved = source.exportGameState()
+        saved.phase = 'wave'
+        const world = new PathwardenWorld({ runId: 'run-pierce', revision: 0, realm: 1, seed: 1, mapPlan, gameState: saved })
+        const brute = world.spawnEntity({ type: 2, components: { enemyType: 'brute', hp: 100, progress: 0.5, speed: 1 } }, 1, 1)
+        world.spawnEntity({ type: 3, components: { targetId: brute, damage: 10, relicFamily: 'pierce', relicPower: 1, progress: 0 } }, 0, 1)
+        const simulateProjectiles = (world as unknown as { simulateProjectiles: () => void }).simulateProjectiles
+        for (let index = 0; index < 4; index++) simulateProjectiles.call(world)
+        expect(world.getEntities().find(entity => entity.id === brute)?.data.components?.hp).toBe(80)
+    })
+
     it('emits a deterministic echo projectile on the shared cadence', () => {
         const world = new PathwardenWorld({ runId: 'run-echo', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
         world.spawnEntity({ type: 1, components: { towerType: 'bolt', level: 1, relicFamily: 'chain', relicPower: 1, relicShots: 3, cooldown: 0 } }, 10, 10)

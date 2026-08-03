@@ -916,7 +916,11 @@ export class PathwardenWorld {
                 }
                 for (const victim of this.getEntities().filter(entity => damageById.has(entity.id))) {
                     const victimComponents = victim.data.components ?? {}
-                    const hp = Number(victimComponents.hp ?? 1) - damageById.get(victim.id)!
+                    const pierceBonus = String(components.relicFamily ?? '') === 'pierce'
+                        && ['brute', 'boss'].includes(String(victimComponents.enemyType ?? ''))
+                        ? 1 + this.relicEffects('pierce', Number(components.relicPower ?? 0)).armorPiercePct / 100
+                        : 1
+                    const hp = Number(victimComponents.hp ?? 1) - damageById.get(victim.id)! * pierceBonus
                     const slow = Math.max(Number(victimComponents.slow ?? 0), Number(components.slow ?? 0))
                     if (hp <= 0) {
                         this.removeEntity(victim.id)
