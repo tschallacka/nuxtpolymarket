@@ -56,6 +56,8 @@ export class PathwardenWorld {
     private lastInputSequence = 0
     private nextEntityId = 1
     private selectedTower = 'bolt'
+    private spawnRemaining = 0
+    private spawnCooldown = 0
     private onChange: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
@@ -186,6 +188,7 @@ export class PathwardenWorld {
             this.lastInputSequence = queued.inputSequence
             changed = this.apply(queued.command) || changed
         }
+        this.simulateWave()
         if (changed || this.state.tick % 10 === 0) this.onChange(this.getSnapshot(), this.getEntities())
     }
 
@@ -200,6 +203,8 @@ export class PathwardenWorld {
             if (this.state.phase !== 'planning') return false
             this.state.phase = 'wave'
             this.state.wave = Math.min(12, this.state.wave + 1)
+            this.spawnRemaining = 7 + this.state.wave * 3 + Math.max(0, this.state.wave - 1)
+            this.spawnCooldown = 0
             return true
         }
         if (command.type === 'select-tower') {
@@ -222,6 +227,82 @@ export class PathwardenWorld {
             }
         }, command.col, command.row)
         return Boolean(defense)
+    }
+
+    private simulateWave() {
+        if (this.state.phase !== 'wave' || this.state.paused) return
+        if (this.spawnRemaining > 0) {
+            if (this.spawnCooldown > 0) this.spawnCooldown--
+            else {
+                this.spawnEnemy()
+                this.spawnRemaining--
+                this.spawnCooldown = 5
+            }
+        }
+        const enemies = this.getEntities().filter(entity => entity.data.type === 2)
+        for (const enemy of enemies) {
+            const components = enemy.data.components ?? {}
+            const progress = Number(components.progress ?? 0) + 0.012
+            if (progress >= 1) {
+                this.removeEntity(enemy.id)
+                this.state.lives = Math.max(0, this.state.lives - 1)
+                if (this.state.lives === 0) {
+                    this.state.phase = 'defeat'
+                    this.spawnRemaining = 0
+                    return
+                }
+                continue
+            }
+            this.updateEntity(enemy.id, { x: progress * 100, y: progress * 100, data: { type: 2, components: { ...components, progress } } })
+        }
+        this.simulateTowers()
+        if (this.spawnRemaining === 0 && !this.getEntities().some(entity => entity.data.type === 2)) {
+            this.state.aether += 20 + this.state.wave * 4
+            this.state.score += 100 * this.state.wave
+            this.state.phase = this.state.wave % 4 === 0 ? 'checkpoint' : 'planning'
+        }
+    }
+
+    private spawnEnemy() {
+        const route = this.mapPlan.rooms.find(room => room.id === this.mapPlan.castleRoomId)?.roadCells ?? []
+        const start = route[0] ?? { col: 80, row: 80 }
+        const hp = 40 + this.state.wave * 12
+        this.spawnEntity({
+            type: 2,
+            components: {
+                enemyType: this.state.wave >= 5 && this.spawnRemaining % 5 === 0 ? 'brute' : 'raider',
+                progress: 0,
+                hp,
+                maxHp: hp,
+                reward: 2 + this.state.wave
+            }
+        }, start.col, start.row)
+    }
+
+    private simulateTowers() {
+        const enemies = this.getEntities().filter(entity => entity.data.type === 2)
+        if (!enemies.length) return
+        for (const tower of this.getEntities().filter(entity => entity.data.type === 1)) {
+            const components = tower.data.components ?? {}
+            const cooldown = Number(components.cooldown ?? 0)
+            if (cooldown > 0) {
+                this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: cooldown - 1 } } })
+                continue
+            }
+            const target = enemies[0]!
+            const hp = Number(target.data.components?.hp ?? 1) - this.towerDamage(String(components.towerType ?? 'bolt'))
+            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: 8 } } })
+            if (hp <= 0) {
+                this.removeEntity(target.id)
+                this.state.score += 10
+            } else {
+                this.updateEntity(target.id, { data: { type: 2, components: { ...target.data.components, hp } } })
+            }
+        }
+    }
+
+    private towerDamage(type: string) {
+        return PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25
     }
 
     private cellKey(col: number, row: number) {

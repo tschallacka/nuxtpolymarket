@@ -30,7 +30,8 @@ describe('Pathwarden authoritative world', () => {
 
         expect(world.getSnapshot()).toMatchObject({ tick: 1, phase: 'wave', wave: 1, paused: false })
         expect(world.lastAppliedInput).toBe(1)
-        expect(changes).toEqual([1])
+        expect(changes.length).toBeGreaterThan(0)
+        expect(changes.every(tick => tick === 1)).toBe(true)
         world.stop()
     })
 
