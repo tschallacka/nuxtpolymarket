@@ -84,6 +84,17 @@ export function usePathwardenRealtime() {
                 entities.value = [...next.values()]
                 return
             }
+            if (packet.header.kind === PathwardenPacketKind.MapStateDelta) {
+                const delta = packet.payload as { claimedRoomIds: string[], revealedCells: Array<{ col: number, row: number }> }
+                if (snapshot.value) {
+                    const claimedRoomIds = [...new Set([...snapshot.value.claimedRoomIds, ...delta.claimedRoomIds])]
+                    const revealed = new Map(snapshot.value.revealedCells.map(cell => [`${cell.col}:${cell.row}`, cell]))
+                    for (const cell of delta.revealedCells) revealed.set(`${cell.col}:${cell.row}`, cell)
+                    snapshot.value = { ...snapshot.value, claimedRoomIds, revealedCells: [...revealed.values()] }
+                    reconcile(snapshot.value)
+                }
+                return
+            }
             if (packet.header.kind === PathwardenPacketKind.ChoiceOffer) {
                 choiceOffer.value = packet.payload as { kind: 'checkpoint' | 'relic' | 'path', choices: number[], offerRevision: number }
                 return

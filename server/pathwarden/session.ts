@@ -20,12 +20,14 @@ import {
     encodeEntitySnapshot,
     encodeChoiceOffer,
     encodeHelloAck,
+    encodeMapStateDelta,
     encodeMapSnapshotChunks,
     encodeProtocolError,
     encodeWorldSnapshot,
     PathwardenPacketKind,
     type PathwardenEntityState,
-    type PathwardenInputCommand
+    type PathwardenInputCommand,
+    type PathwardenWorldSnapshot
 } from '#shared/pathwarden/protocol'
 
 interface ActiveSession {
@@ -40,6 +42,8 @@ interface ActiveSession {
     commandWindowStartedAt: number
     commandsInWindow: number
     lastEntities: Map<number, PathwardenEntityState>
+    lastClaimedRoomIds: Set<string>
+    lastRevealedCells: Set<string>
 }
 
 const sessions = new Map<string, ActiveSession>()
@@ -103,7 +107,9 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
         persistPromise: null,
         commandWindowStartedAt: Date.now(),
         commandsInWindow: 0,
-        lastEntities: new Map()
+        lastEntities: new Map(),
+        lastClaimedRoomIds: new Set(),
+        lastRevealedCells: new Set()
     }
 }
 
@@ -123,6 +129,13 @@ function entityState(entity: PathwardenEntity): PathwardenEntityState {
 
 function entityChanged(left: PathwardenEntityState, right: PathwardenEntityState) {
     return JSON.stringify(left) !== JSON.stringify(right)
+}
+
+function mapState(snapshot: PathwardenWorldSnapshot) {
+    return {
+        claimedRoomIds: new Set(snapshot.claimedRoomIds),
+        revealedCells: new Set(snapshot.revealedCells.map(cell => `${cell.col}:${cell.row}`))
+    }
 }
 
 function persistWorld(session: ActiveSession, tick: number, terminal: boolean) {
@@ -201,7 +214,22 @@ export async function openPathwardenSession(peer: Peer) {
         const nextIds = new Set(nextEntities.map(entity => entity.id))
         const removed = [...session.lastEntities.keys()].filter(id => !nextIds.has(id))
         session.lastEntities = new Map(nextEntities.map(entity => [entity.id, entity]))
-        send(session, encodeEntityDelta({ upserts, removed }, { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
+        const nextMap = mapState(snapshot)
+        const claimedRoomIds = [...nextMap.claimedRoomIds].filter(roomId => !session.lastClaimedRoomIds.has(roomId))
+        const revealedCells = [...nextMap.revealedCells]
+            .filter(key => !session.lastRevealedCells.has(key))
+            .map(key => {
+                const [col = 0, row = 0] = key.split(':').map(Number)
+                return { col, row }
+            })
+        session.lastClaimedRoomIds = nextMap.claimedRoomIds
+        session.lastRevealedCells = nextMap.revealedCells
+        if (claimedRoomIds.length || revealedCells.length) {
+            send(session, encodeMapStateDelta({ claimedRoomIds, revealedCells }, { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
+        }
+        if (upserts.length || removed.length) {
+            send(session, encodeEntityDelta({ upserts, removed }, { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
+        }
         send(session, encodeWorldSnapshot(snapshot, { sequence: session.nextPacketSequence++, acknowledgedInput: session.world.lastAppliedInput }))
         const offer = session.world.getChoiceOffer()
         if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: snapshot.tick }, offer.offerRevision))
@@ -219,6 +247,9 @@ export async function openPathwardenSession(peer: Peer) {
     }
     const initialEntities = session.world.getEntities().map(entityState)
     session.lastEntities = new Map(initialEntities.map(entity => [entity.id, entity]))
+    const initialMap = mapState(session.world.getSnapshot())
+    session.lastClaimedRoomIds = initialMap.claimedRoomIds
+    session.lastRevealedCells = initialMap.revealedCells
     send(session, encodeEntitySnapshot(initialEntities, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }))
     send(session, encodeWorldSnapshot(session.world.getSnapshot(), { sequence: session.nextPacketSequence++ }))
     const offer = session.world.getChoiceOffer()

@@ -17,7 +17,8 @@ export const enum PathwardenPacketKind {
     MapSnapshotChunk = 12,
     EntitySnapshot = 13,
     ChoiceOffer = 14,
-    EntityDelta = 15
+    EntityDelta = 15,
+    MapStateDelta = 16
 }
 
 export type PathwardenPhase = 'planning' | 'wave' | 'checkpoint' | 'path' | 'upgrade' | 'cashout' | 'victory' | 'defeat'
@@ -66,6 +67,11 @@ export interface PathwardenEntityState {
 export interface PathwardenEntityDelta {
     upserts: PathwardenEntityState[]
     removed: number[]
+}
+
+export interface PathwardenMapStateDelta {
+    claimedRoomIds: string[]
+    revealedCells: Array<{ col: number, row: number }>
 }
 
 export type PathwardenInputCommand =
@@ -336,7 +342,7 @@ function readHeader(reader: ByteReader): PathwardenPacketHeader {
     if (reader.u8() !== PATHWARDEN_PROTOCOL_MAGIC) throw new Error('Invalid Pathwarden packet magic')
     if (reader.u8() !== PATHWARDEN_PROTOCOL_VERSION) throw new Error('Unsupported Pathwarden protocol version')
     const kind = reader.u8()
-    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.EntityDelta) throw new Error('Unknown Pathwarden packet kind')
+    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.MapStateDelta) throw new Error('Unknown Pathwarden packet kind')
     const flags = reader.u8()
     const schema = reader.u8()
     reader.u8()
@@ -470,6 +476,19 @@ export function encodeEntityDelta(delta: PathwardenEntityDelta, header: Partial<
     payload.varUint(delta.removed.length)
     for (const id of delta.removed) payload.varUint(id)
     return encodePacket({ kind: PathwardenPacketKind.EntityDelta, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
+}
+
+export function encodeMapStateDelta(delta: PathwardenMapStateDelta, header: Partial<PathwardenPacketHeader> = {}) {
+    if (delta.claimedRoomIds.length > 10_000 || delta.revealedCells.length > 100_000) throw new Error('Pathwarden map delta exceeds protocol limit')
+    const payload = new ByteWriter()
+    payload.varUint(delta.claimedRoomIds.length)
+    for (const roomId of delta.claimedRoomIds) payload.string(roomId, 96)
+    payload.varUint(delta.revealedCells.length)
+    for (const cell of delta.revealedCells) {
+        payload.u16(cell.col)
+        payload.u16(cell.row)
+    }
+    return encodePacket({ kind: PathwardenPacketKind.MapStateDelta, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
 export function encodeChoiceOffer(kind: 'checkpoint' | 'relic' | 'path', choices: number[], header: Partial<PathwardenPacketHeader> = {}, offerRevision = 0) {
@@ -637,6 +656,16 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
         const removedCount = payloadReader.varUint()
         if (upsertCount > 10_000 || removedCount > 10_000) throw new Error('Pathwarden entity delta exceeds protocol limit')
         payload = { upserts, removed: Array.from({ length: removedCount }, () => payloadReader.varUint()) }
+    } else if (header.kind === PathwardenPacketKind.MapStateDelta) {
+        const claimedRoomCount = payloadReader.varUint()
+        if (claimedRoomCount > 10_000) throw new Error('Pathwarden map delta exceeds protocol limit')
+        const claimedRoomIds = Array.from({ length: claimedRoomCount }, () => payloadReader.string(96))
+        const revealedCellCount = payloadReader.varUint()
+        if (revealedCellCount > 100_000) throw new Error('Pathwarden map delta exceeds protocol limit')
+        payload = {
+            claimedRoomIds,
+            revealedCells: Array.from({ length: revealedCellCount }, () => ({ col: payloadReader.u16(), row: payloadReader.u16() }))
+        }
     } else if (header.kind === PathwardenPacketKind.ChoiceOffer) {
         const kind = payloadReader.u8()
         const offerRevision = payloadReader.u32()

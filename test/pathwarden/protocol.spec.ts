@@ -5,6 +5,7 @@ import {
     encodeEntityDelta,
     encodeEntitySnapshot,
     encodeChoiceOffer,
+    encodeMapStateDelta,
     encodeMapSnapshotChunks,
     encodeHello,
     encodeInputCommand,
@@ -131,6 +132,19 @@ describe('Pathwarden binary gameplay protocol', () => {
         expect(decoded.payload).toEqual({
             upserts: [{ id: 4, type: 3, x: 12, y: 13, z: 0, v1: 0, v2: 0, v3: 0, components: { targetId: 9, progress: 0.5 } }],
             removed: [2, 7]
+        })
+    })
+
+    it('round-trips incremental map state deltas', () => {
+        const packet = encodeMapStateDelta({
+            claimedRoomIds: ['room-2'],
+            revealedCells: [{ col: 15, row: 9 }, { col: 16, row: 9 }]
+        }, { tick: 21 })
+        const decoded = decodePacket(packet)
+        expect(decoded.header.kind).toBe(PathwardenPacketKind.MapStateDelta)
+        expect(decoded.payload).toEqual({
+            claimedRoomIds: ['room-2'],
+            revealedCells: [{ col: 15, row: 9 }, { col: 16, row: 9 }]
         })
     })
 
