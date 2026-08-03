@@ -44,6 +44,15 @@ export function usePathwardenRealtime() {
     let activeRunId: string | null = null
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let intentionalClose = false
+    let lastResyncAt = 0
+
+    function requestResync(reason: string) {
+        const now = Date.now()
+        if (!socket || socket.readyState !== WebSocket.OPEN || now - lastResyncAt < 5000) return
+        lastResyncAt = now
+        lastError.value = `Pathwarden state resync requested: ${reason}`
+        socket.close(4008, 'Pathwarden state resync')
+    }
 
     function reconcile(serverSnapshot: PathwardenWorldSnapshot) {
         const next = { ...serverSnapshot }
@@ -76,8 +85,12 @@ export function usePathwardenRealtime() {
                     const tickGap = next.tick - snapshot.value.tick
                     if (tickGap < 0) {
                         staleSnapshots.value += 1
+                        if (staleSnapshots.value >= 3) requestResync('stale snapshots')
                         return
-                    } else maxTickGap.value = Math.max(maxTickGap.value, tickGap)
+                    } else {
+                        maxTickGap.value = Math.max(maxTickGap.value, tickGap)
+                        if (tickGap > 100) requestResync('client fell behind')
+                    }
                 }
                 snapshot.value = next
                 const expectedChoiceKind = next.phase === 'checkpoint'
