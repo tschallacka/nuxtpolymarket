@@ -71,4 +71,12 @@ describe('Pathwarden authoritative world', () => {
         })
         expect(world.getSnapshot()).toMatchObject({ revision: 4, realm: 2, wave: 3, lives: 17, aether: 144, score: 880, paused: true })
     })
+
+    it('rejects commands outside the current phase before queueing them', () => {
+        const world = new PathwardenWorld({ runId: 'run-3', revision: 0, realm: 1, seed: 1, gameState: null })
+        expect(world.canApply({ type: 'place-tower', col: 1, row: 1 })).toBe(false)
+        expect(world.canApply({ type: 'start-wave' })).toBe(true)
+        world.enqueue(1, { type: 'start-wave' })
+        expect(world.canApply({ type: 'start-wave' })).toBe(true)
+    })
 })

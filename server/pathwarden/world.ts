@@ -67,9 +67,16 @@ export class PathwardenWorld {
     }
 
     enqueue(inputSequence: number, command: PathwardenInputCommand) {
-        if (!Number.isSafeInteger(inputSequence) || inputSequence <= this.lastInputSequence) return false
+        if (!Number.isSafeInteger(inputSequence) || inputSequence <= this.lastInputSequence || !this.canApply(command)) return false
         this.commands.push({ inputSequence, command })
         return true
+    }
+
+    canApply(command: PathwardenInputCommand) {
+        if (command.type === 'place-tower') return false
+        if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
+        if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
+        return command.type === 'select-tower'
     }
 
     getSnapshot() {

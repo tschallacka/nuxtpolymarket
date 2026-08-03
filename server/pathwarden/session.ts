@@ -62,11 +62,14 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
 }
 
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
-    if (!session.world.enqueue(inputSequence, command)) return
-    if (command.type === 'place-tower') {
-        send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, 'Placement authority is not enabled in this migration slice'))
+    if (!session.world.canApply(command)) {
+        const reason = command.type === 'place-tower'
+            ? 'Placement authority is not enabled in this migration slice'
+            : 'Command is not valid in the current Pathwarden phase'
+        send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, reason))
         return
     }
+    if (!session.world.enqueue(inputSequence, command)) return
     send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
 }
 
