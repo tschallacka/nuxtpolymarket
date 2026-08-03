@@ -26,6 +26,22 @@ describe('Pathwarden authority boundaries', () => {
         const localPlacementValidation = engineSource.indexOf('const placement = this.placementStatus(cell)')
         expect(authoritativePlacement).toBeGreaterThan(-1)
         expect(authoritativePlacement).toBeLessThan(localPlacementValidation)
+
+        const liveInputMethods = [
+            ['startWave()', "if (this.phase !== 'planning' || this.pendingWaveStart) return"],
+            ['continueCheckpoint()', "if (this.phase !== 'checkpoint') return"],
+            ['sellRelic(instanceId: number)', "if (!this.canSellRelics || this.phase === 'wave' || this.phase === 'checkpoint') return"],
+            ['salvageSelectedBuilding()', "if (this.phase !== 'planning' || !tower) return"],
+            ['upgradeSelectedBuilding()', "if (this.phase !== 'planning' || !tower || tower.level >= 3) return"]
+        ] as const
+        for (const [method, localGuard] of liveInputMethods) {
+            const methodStart = engineSource.indexOf(method)
+            const authorityBranch = engineSource.indexOf('if (this.serverAuthoritative)', methodStart)
+            const guard = engineSource.indexOf(localGuard, methodStart)
+            expect(methodStart).toBeGreaterThan(-1)
+            expect(authorityBranch).toBeGreaterThan(methodStart)
+            expect(guard).toBeGreaterThan(authorityBranch)
+        }
     })
 
     it('scopes the development bridge to Pathwarden', () => {
