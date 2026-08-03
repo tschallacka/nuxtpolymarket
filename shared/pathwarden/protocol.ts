@@ -87,6 +87,13 @@ export interface PathwardenGameplayEvent {
     v3: number
 }
 
+export const enum PathwardenGameplayEventType {
+    Impact = 1,
+    EnemyDefeated = 2,
+    EnemyLeak = 3,
+    WaveCleared = 4
+}
+
 export type PathwardenInputCommand =
     | { type: 'pause', value: boolean }
     | { type: 'start-wave' }

@@ -16,6 +16,7 @@ import type {
   PathwardenGameState,
   PathwardenMapPlan
 } from '#shared/types/pathwarden-save'
+import { PathwardenGameplayEventType } from '#shared/pathwarden/protocol'
 import type { PathwardenEntityState, PathwardenGameplayEvent, PathwardenInputCommand } from '#shared/pathwarden/protocol'
 
 const WIDTH = 1200
@@ -1417,9 +1418,17 @@ export class PathwardenEngine {
     for (const event of events) {
       if (this.appliedAuthoritativeEventIds.has(event.id)) continue
       this.appliedAuthoritativeEventIds.add(event.id)
-      if (event.type !== 1) continue
-      const position = this.gridToScreen({ col: event.x, row: event.y })
-      this.shockwaves.push({ ...position, radius: 6, maxRadius: 54, life: 0.42, color: '#fef08a' })
+      const position = event.type === PathwardenGameplayEventType.WaveCleared
+        ? WORLD_VIEW_CENTER
+        : this.gridToScreen({ col: event.x, row: event.y })
+      const visual = event.type === PathwardenGameplayEventType.EnemyDefeated
+        ? { maxRadius: 38, life: 0.3, color: '#fb7185' }
+        : event.type === PathwardenGameplayEventType.EnemyLeak
+          ? { maxRadius: 30, life: 0.25, color: '#fb923c' }
+          : event.type === PathwardenGameplayEventType.WaveCleared
+            ? { maxRadius: 110, life: 0.8, color: '#facc15' }
+            : { maxRadius: 54, life: 0.42, color: '#fef08a' }
+      this.shockwaves.push({ ...position, radius: 6, ...visual })
     }
     if (this.appliedAuthoritativeEventIds.size > 2048) {
       const oldest = this.appliedAuthoritativeEventIds.values().next().value

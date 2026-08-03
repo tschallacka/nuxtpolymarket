@@ -6,6 +6,7 @@ import type {
     PathwardenWorldSnapshot,
     PathwardenGameplayEvent
 } from '#shared/pathwarden/protocol'
+import { PathwardenGameplayEventType } from '#shared/pathwarden/protocol'
 import { hashPathwardenState, recordPathwardenReplay } from '#server/pathwarden/replay'
 
 export interface PathwardenWorldSource {
@@ -434,6 +435,11 @@ export class PathwardenWorld {
         this.onChange(this.getSnapshot(), this.getEntities())
     }
 
+    private emitGameplayEvent(type: PathwardenGameplayEventType, entityId: number, x: number, y: number) {
+        if (this.events.length >= 256) return
+        this.events.push({ id: this.nextEventId++, type, entityId, x, y, z: 0, v1: 0, v2: 0, v3: 0 })
+    }
+
     private apply(command: PathwardenInputCommand) {
         if (command.type === 'pause') {
             if (this.state.phase === 'victory' || this.state.phase === 'defeat' || this.state.phase === 'cashout') return false
@@ -595,6 +601,7 @@ export class PathwardenWorld {
             const dotHp = Number(components.hp ?? 1) - (dotTimer > 0 ? dotDamage : 0)
             if (dotTimer > 0 && dotHp <= 0) {
                 this.removeEntity(enemy.id)
+                this.emitGameplayEvent(PathwardenGameplayEventType.EnemyDefeated, enemy.id, enemy.x, enemy.y)
                 this.state.score += 10
                 this.state.aether += Math.max(0, Number(components.reward ?? 0))
                 continue
@@ -614,6 +621,7 @@ export class PathwardenWorld {
             const progress = Number(components.progress ?? 0) + 0.012 * Number(components.speed ?? 1) * (1 - Math.min(0.8, slow))
             if (progress >= 1) {
                 this.removeEntity(enemy.id)
+                this.emitGameplayEvent(PathwardenGameplayEventType.EnemyLeak, enemy.id, enemy.x, enemy.y)
                 this.state.lives = Math.max(0, this.state.lives - Math.max(1, Math.floor(Number(components.leakDamage ?? 1))))
                 this.streak = 0
                 this.state.streak = 0
@@ -639,6 +647,7 @@ export class PathwardenWorld {
             }
             this.state.aether += 20 + this.state.wave * 4
             this.state.score += 100 * this.state.wave
+            this.emitGameplayEvent(PathwardenGameplayEventType.WaveCleared, 0, 0, 0)
             if (this.state.wave % 4 === 0) {
                 this.state.phase = 'checkpoint'
                 this.choiceKind = 'checkpoint'
@@ -738,7 +747,7 @@ export class PathwardenWorld {
             if (progress >= 1) {
                 this.removeEntity(projectile.id)
                 const impactId = this.spawnEntity({ type: 6, components: { kind: 'impact', progress: 0, duration: 8, color: 'primary' } }, target.x, target.y)
-                this.events.push({ id: this.nextEventId++, type: 1, entityId: impactId, x: target.x, y: target.y, z: 0, v1: 0, v2: 0, v3: 0 })
+                this.emitGameplayEvent(PathwardenGameplayEventType.Impact, impactId, target.x, target.y)
                 const splash = Math.max(0, Number(components.splash ?? 0))
                 const affected = this.getEntities().filter(candidate => candidate.data.type === 2
                     && Math.hypot(candidate.x - target.x, candidate.y - target.y) <= splash)
@@ -748,6 +757,7 @@ export class PathwardenWorld {
                     const slow = Math.max(Number(victimComponents.slow ?? 0), Number(components.slow ?? 0))
                     if (hp <= 0) {
                         this.removeEntity(victim.id)
+                        this.emitGameplayEvent(PathwardenGameplayEventType.EnemyDefeated, victim.id, victim.x, victim.y)
                         this.state.score += 10
                         this.state.aether += Math.max(0, Number(victimComponents.reward ?? 0))
                     } else {
