@@ -91,7 +91,8 @@ export const enum PathwardenGameplayEventType {
     Impact = 1,
     EnemyDefeated = 2,
     EnemyLeak = 3,
-    WaveCleared = 4
+    WaveCleared = 4,
+    AmbientStoryCompleted = 5
 }
 
 export type PathwardenInputCommand =

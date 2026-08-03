@@ -845,7 +845,9 @@ export class PathwardenWorld {
             this.removeEntity(ambient.id)
             this.state.aether += 5
             this.state.score += 5
-            this.onAmbientStoryComplete(Number(components.storyId ?? 1))
+            const storyId = Number(components.storyId ?? 1)
+            this.emitGameplayEvent(PathwardenGameplayEventType.AmbientStoryCompleted, storyId, ambient.x, ambient.y)
+            this.onAmbientStoryComplete(storyId)
         } else {
             this.updateEntity(ambient.id, { data: { type: 4, components: { ...components, progress } } })
         }

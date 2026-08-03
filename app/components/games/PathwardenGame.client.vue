@@ -12,7 +12,7 @@ import {
   type PathwardenTowerType
 } from '~/utils/pathwarden-engine'
 import type { PathwardenGameState, PathwardenMapPlan } from '#shared/types/pathwarden-save'
-import type { PathwardenInputCommand } from '#shared/pathwarden/protocol'
+import { PathwardenGameplayEventType, type PathwardenInputCommand } from '#shared/pathwarden/protocol'
 import {
   PATHWARDEN_DEFENSE_BLUEPRINTS,
   type PathwardenDefenseArchetype,
@@ -1184,6 +1184,7 @@ watch(realtime.entities, entities => {
 
 watch(realtime.events, events => {
   engine?.applyAuthoritativeEvents(events)
+  if (events.some(event => event.type === PathwardenGameplayEventType.AmbientStoryCompleted)) void refreshBoosts()
 })
 
 watch(realtime.choiceOffer, offer => {

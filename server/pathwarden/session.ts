@@ -1,7 +1,7 @@
 import type { Peer } from 'crossws'
 import { and, eq, sql } from 'drizzle-orm'
 import { db } from '#server/database'
-import { pathwardenRuns, pathwardenState } from '#server/database/schema'
+import { pathwardenRuns } from '#server/database/schema'
 import { auth } from '#server/utils/auth'
 import { pathwardenLevels, recordPathwardenAmbientStory } from '#server/utils/pathwarden'
 import { pathwardenBoostEffects } from '#shared/utils/gamelogic/pathwarden'
