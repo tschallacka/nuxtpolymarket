@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
     decodePacket,
+    decodeCompound,
+    encodeMapSnapshotChunks,
     encodeHello,
     encodeInputCommand,
     encodeWorldSnapshot,
     PathwardenPacketKind
 } from '#shared/pathwarden/protocol'
+import { createPathwardenMapPlan } from '#shared/utils/gamelogic/pathwarden-map'
 
 describe('Pathwarden binary gameplay protocol', () => {
     it('round-trips a compact world snapshot', () => {
@@ -61,5 +64,20 @@ describe('Pathwarden binary gameplay protocol', () => {
         trailing.set(packet)
         trailing[trailing.length - 1] = 1
         expect(() => decodePacket(trailing)).toThrow('Invalid Pathwarden payload length')
+    })
+
+    it('round-trips the server map as a typed compound byte stream', () => {
+        const map = createPathwardenMapPlan({ seed: 1, realm: 1 })
+        const packets = encodeMapSnapshotChunks(map)
+        const chunks = packets.map(packet => decodePacket(packet).payload as { chunkIndex: number, chunkCount: number, bytes: Uint8Array })
+        const bytes = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.bytes.byteLength, 0))
+        let offset = 0
+        for (const chunk of chunks.sort((a, b) => a.chunkIndex - b.chunkIndex)) {
+            bytes.set(chunk.bytes, offset)
+            offset += chunk.bytes.byteLength
+            expect(chunk.chunkCount).toBe(packets.length)
+        }
+        expect(decodeCompound(bytes)).toEqual(map)
+        expect(Math.max(...packets.map(packet => packet.byteLength))).toBeLessThan(13 * 1024)
     })
 })

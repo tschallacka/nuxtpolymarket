@@ -1,11 +1,13 @@
 import {
     decodePacket,
+    decodeCompound,
     encodeHello,
     encodeInputCommand,
     PathwardenPacketKind,
     type PathwardenInputCommand,
     type PathwardenWorldSnapshot
 } from '#shared/pathwarden/protocol'
+import type { PathwardenMapPlan } from '#shared/types/pathwarden-save'
 
 export type PathwardenRealtimeStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -19,6 +21,9 @@ export interface PathwardenPredictionState {
 export function usePathwardenRealtime() {
     const status = ref<PathwardenRealtimeStatus>('disconnected')
     const snapshot = ref<PathwardenWorldSnapshot | null>(null)
+    const mapPlan = ref<PathwardenMapPlan | null>(null)
+    const mapChunks = new Map<number, Uint8Array>()
+    let expectedMapChunks = 0
     const predictedSnapshot = ref<PathwardenWorldSnapshot | null>(null)
     const lastError = ref<string | null>(null)
     const lastAcknowledgedInput = ref(0)
@@ -55,6 +60,28 @@ export function usePathwardenRealtime() {
                 reconcile(next)
                 return
             }
+            if (packet.header.kind === PathwardenPacketKind.MapSnapshot) {
+                mapPlan.value = packet.payload as PathwardenMapPlan
+                return
+            }
+            if (packet.header.kind === PathwardenPacketKind.MapSnapshotChunk) {
+                const chunk = packet.payload as { chunkIndex: number, chunkCount: number, bytes: Uint8Array }
+                expectedMapChunks = chunk.chunkCount
+                mapChunks.set(chunk.chunkIndex, chunk.bytes)
+                if (mapChunks.size === expectedMapChunks) {
+                    const bytes = new Uint8Array([...Array.from(mapChunks.keys()).sort((a, b) => a - b)].reduce((total, index) => total + mapChunks.get(index)!.byteLength, 0))
+                    let offset = 0
+                    for (let index = 0; index < expectedMapChunks; index++) {
+                        const part = mapChunks.get(index)!
+                        bytes.set(part, offset)
+                        offset += part.byteLength
+                    }
+                    mapPlan.value = decodeCompound(bytes) as PathwardenMapPlan
+                    mapChunks.clear()
+                    expectedMapChunks = 0
+                }
+                return
+            }
             if (packet.header.kind === PathwardenPacketKind.CommandAck || packet.header.kind === PathwardenPacketKind.CommandReject) {
                 const payload = packet.payload as { inputSequence?: number, accepted?: boolean, reason?: string } | null
                 const inputSequence = payload?.inputSequence ?? packet.header.acknowledgedInput
@@ -80,6 +107,9 @@ export function usePathwardenRealtime() {
         status.value = 'disconnected'
         pending.clear()
         snapshot.value = null
+        mapPlan.value = null
+        mapChunks.clear()
+        expectedMapChunks = 0
         predictedSnapshot.value = null
     }
 
@@ -117,6 +147,7 @@ export function usePathwardenRealtime() {
     return {
         status: readonly(status),
         snapshot: readonly(snapshot),
+        mapPlan: readonly(mapPlan),
         predictedSnapshot: readonly(predictedSnapshot),
         lastError: readonly(lastError),
         pendingInputs: computed(() => pending.size),

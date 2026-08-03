@@ -7,6 +7,7 @@ import {
     decodePacket,
     encodeCommandAck,
     encodeHelloAck,
+    encodeMapSnapshotChunks,
     encodeProtocolError,
     encodeWorldSnapshot,
     PathwardenPacketKind,
@@ -18,6 +19,7 @@ interface ActiveSession {
     userId: string
     runId: string
     nextPacketSequence: number
+    mapPlan: unknown
     world: PathwardenWorld
 }
 
@@ -58,7 +60,7 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
         seed: Number(run.seed) >>> 0,
         gameState: run.gameState ?? null
     })
-    return { peer, userId, runId, nextPacketSequence: 1, world }
+    return { peer, userId, runId, nextPacketSequence: 1, mapPlan: run.mapPlan, world }
 }
 
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
@@ -84,6 +86,10 @@ export async function openPathwardenSession(peer: Peer) {
     })
     sessions.set(session.runId, session)
     send(session, encodeHelloAck({ sequence: session.nextPacketSequence++ }))
+    for (const packet of encodeMapSnapshotChunks(session.mapPlan, session.nextPacketSequence)) {
+        send(session, packet)
+        session.nextPacketSequence++
+    }
     send(session, encodeWorldSnapshot(session.world.getSnapshot(), { sequence: session.nextPacketSequence++ }))
     session.world.start()
 }

@@ -12,7 +12,9 @@ export const enum PathwardenPacketKind {
     Correction = 7,
     Ping = 8,
     Pong = 9,
-    ProtocolError = 10
+    ProtocolError = 10,
+    MapSnapshot = 11,
+    MapSnapshotChunk = 12
 }
 
 export type PathwardenPhase = 'planning' | 'wave' | 'checkpoint' | 'path' | 'upgrade' | 'cashout' | 'victory' | 'defeat'
@@ -53,6 +55,7 @@ export interface PathwardenDecodedPacket {
 }
 
 const HEADER_BYTES = 20
+const MAP_CHUNK_BYTES = 12 * 1024
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
@@ -97,6 +100,64 @@ class ByteWriter {
         for (const byte of value) this.u8(byte)
     }
 
+    signedVarInt(value: number) {
+        const integer = Math.trunc(value)
+        this.varUint(integer < 0 ? (-integer * 2) - 1 : integer * 2)
+    }
+
+    value(value: unknown, depth = 0) {
+        if (depth > 8) throw new Error('Pathwarden compound nesting limit exceeded')
+        if (value === null) {
+            this.u8(0)
+            return
+        }
+        if (value === false) {
+            this.u8(1)
+            return
+        }
+        if (value === true) {
+            this.u8(2)
+            return
+        }
+        if (typeof value === 'number') {
+            if (!Number.isFinite(value)) throw new Error('Pathwarden compound contains a non-finite number')
+            if (Number.isInteger(value)) {
+                this.u8(3)
+                this.signedVarInt(value)
+            } else {
+                this.u8(4)
+                const view = new DataView(new ArrayBuffer(4))
+                view.setFloat32(0, value, true)
+                for (let index = 0; index < 4; index++) this.u8(view.getUint8(index))
+            }
+            return
+        }
+        if (typeof value === 'string') {
+            this.u8(5)
+            this.string(value, 2048)
+            return
+        }
+        if (Array.isArray(value)) {
+            if (value.length > 10_000) throw new Error('Pathwarden compound array limit exceeded')
+            this.u8(6)
+            this.varUint(value.length)
+            for (const child of value) this.value(child, depth + 1)
+            return
+        }
+        if (typeof value === 'object') {
+            const entries = Object.entries(value)
+            if (entries.length > 512) throw new Error('Pathwarden compound field limit exceeded')
+            this.u8(7)
+            this.varUint(entries.length)
+            for (const [key, child] of entries) {
+                this.string(key, 128)
+                this.value(child, depth + 1)
+            }
+            return
+        }
+        throw new Error('Unsupported Pathwarden compound value')
+    }
+
     finish() {
         return Uint8Array.from(this.bytes)
     }
@@ -136,6 +197,11 @@ class ByteReader {
         throw new Error('Invalid Pathwarden varint')
     }
 
+    signedVarInt() {
+        const value = this.varUint()
+        return value % 2 === 0 ? value / 2 : -((value + 1) / 2)
+    }
+
     bool() {
         const value = this.u8()
         if (value > 1) throw new Error('Invalid Pathwarden boolean')
@@ -158,6 +224,34 @@ class ByteReader {
         const value = this.bytes.slice(this.offset, this.offset + length)
         this.offset += length
         return value
+    }
+
+    value(depth = 0): unknown {
+        if (depth > 8) throw new Error('Pathwarden compound nesting limit exceeded')
+        const tag = this.u8()
+        if (tag === 0) return null
+        if (tag === 1) return false
+        if (tag === 2) return true
+        if (tag === 3) return this.signedVarInt()
+        if (tag === 4) {
+            const view = new DataView(new ArrayBuffer(4))
+            for (let index = 0; index < 4; index++) view.setUint8(index, this.u8())
+            return view.getFloat32(0, true)
+        }
+        if (tag === 5) return this.string(2048)
+        if (tag === 6) {
+            const length = this.varUint()
+            if (length > 10_000) throw new Error('Pathwarden compound array limit exceeded')
+            return Array.from({ length }, () => this.value(depth + 1))
+        }
+        if (tag === 7) {
+            const length = this.varUint()
+            if (length > 512) throw new Error('Pathwarden compound field limit exceeded')
+            const result: Record<string, unknown> = {}
+            for (let index = 0; index < length; index++) result[this.string(128)] = this.value(depth + 1)
+            return result
+        }
+        throw new Error('Unknown Pathwarden compound tag')
     }
 
     raw(length: number) {
@@ -206,7 +300,7 @@ function readHeader(reader: ByteReader): PathwardenPacketHeader {
     if (reader.u8() !== PATHWARDEN_PROTOCOL_MAGIC) throw new Error('Invalid Pathwarden packet magic')
     if (reader.u8() !== PATHWARDEN_PROTOCOL_VERSION) throw new Error('Unsupported Pathwarden protocol version')
     const kind = reader.u8()
-    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.ProtocolError) throw new Error('Unknown Pathwarden packet kind')
+    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.MapSnapshotChunk) throw new Error('Unknown Pathwarden packet kind')
     const flags = reader.u8()
     const schema = reader.u8()
     reader.u8()
@@ -257,6 +351,33 @@ export function encodeWorldSnapshot(snapshot: PathwardenWorldSnapshot, header: P
     payload.bool(snapshot.paused)
     payload.varUint(snapshot.entityCount)
     return encodePacket({ kind: PathwardenPacketKind.FullSnapshot, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: snapshot.tick, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
+}
+
+export function encodeMapSnapshot(mapPlan: unknown, header: Partial<PathwardenPacketHeader> = {}) {
+    const payload = new ByteWriter()
+    payload.value(mapPlan)
+    return encodePacket({ kind: PathwardenPacketKind.MapSnapshot, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
+}
+
+export function encodeMapSnapshotChunks(mapPlan: unknown, firstSequence = 0) {
+    const compound = new ByteWriter()
+    compound.value(mapPlan)
+    const bytes = compound.finish()
+    const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / MAP_CHUNK_BYTES))
+    return Array.from({ length: chunkCount }, (_, chunkIndex) => {
+        const payload = new ByteWriter()
+        payload.varUint(chunkIndex)
+        payload.varUint(chunkCount)
+        payload.writeBytes(bytes.slice(chunkIndex * MAP_CHUNK_BYTES, (chunkIndex + 1) * MAP_CHUNK_BYTES), MAP_CHUNK_BYTES)
+        return encodePacket({ kind: PathwardenPacketKind.MapSnapshotChunk, flags: 0, schema: 1, sequence: firstSequence + chunkIndex, tick: 0, acknowledgedInput: 0 }, payload.finish())
+    })
+}
+
+export function decodeCompound(value: ArrayBufferLike | Uint8Array) {
+    const reader = new ByteReader(asBytes(value))
+    const decoded = reader.value()
+    if (!reader.done()) throw new Error('Trailing Pathwarden compound data')
+    return decoded
 }
 
 export function encodeCommandAck(inputSequence: number, tick: number, accepted: boolean, reason = '') {
@@ -330,6 +451,14 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
         payload = { inputSequence: payloadReader.varUint(), accepted: payloadReader.bool(), reason: payloadReader.string(160) }
     } else if (header.kind === PathwardenPacketKind.ProtocolError) {
         payload = { message: payloadReader.string(240) }
+    } else if (header.kind === PathwardenPacketKind.MapSnapshot) {
+        payload = payloadReader.value()
+    } else if (header.kind === PathwardenPacketKind.MapSnapshotChunk) {
+        payload = {
+            chunkIndex: payloadReader.varUint(),
+            chunkCount: payloadReader.varUint(),
+            bytes: payloadReader.bytesValue(MAP_CHUNK_BYTES)
+        }
     }
     if (!payloadReader.done()) throw new Error('Trailing Pathwarden packet data')
     return { header, payload }
