@@ -13,6 +13,22 @@ export interface PathwardenWorldSource {
     gameState: PathwardenGameState | null
 }
 
+export interface PathwardenEntityData {
+    type: number
+    components?: Record<string, number | string | boolean>
+}
+
+export interface PathwardenEntity {
+    id: number
+    data: PathwardenEntityData
+    x: number
+    y: number
+    z: number
+    v1: number
+    v2: number
+    v3: number
+}
+
 interface QueuedCommand {
     inputSequence: number
     command: PathwardenInputCommand
@@ -29,9 +45,11 @@ function initialPhase(state: PathwardenGameState | null): PathwardenPhase {
 
 export class PathwardenWorld {
     private readonly commands: QueuedCommand[] = []
+    private readonly entities = new Map<number, PathwardenEntity>()
     private readonly state: PathwardenWorldSnapshot
     private timer: ReturnType<typeof setInterval> | null = null
     private lastInputSequence = 0
+    private nextEntityId = 1
     private onChange: (snapshot: PathwardenWorldSnapshot) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
@@ -81,6 +99,49 @@ export class PathwardenWorld {
 
     getSnapshot() {
         return { ...this.state }
+    }
+
+    spawnEntity(data: PathwardenEntityData, x: number, y: number, z = 0, v1 = 0, v2 = 0, v3 = 0) {
+        if (!Number.isInteger(data.type) || data.type < 0 || data.type > 255) throw new Error('Invalid Pathwarden entity type')
+        const entity: PathwardenEntity = {
+            id: this.nextEntityId++,
+            data: { type: data.type, components: data.components ? { ...data.components } : undefined },
+            x,
+            y,
+            z,
+            v1,
+            v2,
+            v3
+        }
+        this.entities.set(entity.id, entity)
+        this.state.entityCount = this.entities.size
+        this.onChange(this.getSnapshot())
+        return entity.id
+    }
+
+    updateEntity(id: number, patch: Partial<Omit<PathwardenEntity, 'id' | 'data'>> & { data?: PathwardenEntityData }) {
+        const entity = this.entities.get(id)
+        if (!entity) return false
+        Object.assign(entity, patch)
+        if (patch.data) entity.data = { ...patch.data, components: patch.data.components ? { ...patch.data.components } : undefined }
+        this.onChange(this.getSnapshot())
+        return true
+    }
+
+    removeEntity(id: number) {
+        const removed = this.entities.delete(id)
+        if (removed) {
+            this.state.entityCount = this.entities.size
+            this.onChange(this.getSnapshot())
+        }
+        return removed
+    }
+
+    getEntities() {
+        return [...this.entities.values()].map(entity => ({
+            ...entity,
+            data: { ...entity.data, components: entity.data.components ? { ...entity.data.components } : undefined }
+        }))
     }
 
     get lastAppliedInput() {

@@ -79,4 +79,17 @@ describe('Pathwarden authoritative world', () => {
         world.enqueue(1, { type: 'start-wave' })
         expect(world.canApply({ type: 'start-wave' })).toBe(true)
     })
+
+    it('allocates and owns entity lifecycle state through the world API', () => {
+        const world = new PathwardenWorld({ runId: 'run-4', revision: 0, realm: 1, seed: 1, gameState: null })
+        const first = world.spawnEntity({ type: 4, components: { health: 100 } }, 10, 20, 1, 2, 3, 4)
+        const second = world.spawnEntity({ type: 5 }, 2, 3)
+        expect(first).toBe(1)
+        expect(second).toBe(2)
+        expect(world.getSnapshot().entityCount).toBe(2)
+        expect(world.updateEntity(first, { x: 11, data: { type: 4, components: { health: 80 } } })).toBe(true)
+        expect(world.getEntities()[0]).toMatchObject({ id: 1, x: 11, data: { components: { health: 80 } } })
+        expect(world.removeEntity(second)).toBe(true)
+        expect(world.getSnapshot().entityCount).toBe(1)
+    })
 })
