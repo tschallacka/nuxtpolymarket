@@ -1999,6 +1999,11 @@ export class PathwardenEngine {
     const tower = this.towers.find(candidate => candidate.id === this.selectedTowerId)
     if (!tower) return
     this.callbacks.onCommand?.({ type: 'set-targeting', id: tower.id, targeting })
+    if (this.serverAuthoritative) {
+      this.message = 'Targeting command sent to the Warden.'
+      this.emitState()
+      return
+    }
     tower.targeting = targeting
     const label = targeting === 'first' ? 'the closest invader' : targeting === 'strong' ? 'the strongest invader' : 'the fastest invader'
     this.message = `${towerStats(tower.type).name} now targets ${label}.`

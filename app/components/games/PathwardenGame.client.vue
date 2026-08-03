@@ -675,11 +675,8 @@ const simulationChartTooltip = (wave: PathwardenSimulationWaveResult) =>
 async function startWave() {
   upgradeChoices.value = []
   if (!await ensureRunStarted()) return
-  if (activeRunId.value) {
-    realtime.send({ type: 'start-wave' })
-    return
-  }
-  engine?.startWave()
+  if (!activeRunId.value) return
+  realtime.send({ type: 'start-wave' })
 }
 
 async function ensureRunStarted() {
@@ -1079,7 +1076,9 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
     ? pathwardenBoostEffects(boostState.value.levels, useSurge.value)
     : undefined, selectedRealm.value, boostState.value?.equippedSkinId ?? 'warden-stone', restore, skipIntro.value)
   engine.setKeyboardPan(keyboardPan.value)
-  if (activeRunId.value) engine.setServerAuthoritative()
+  // The local engine is a renderer and presentation controller even before a
+  // run exists. Gameplay commands must never fall back to a local simulation.
+  engine.setServerAuthoritative()
   if (startEngine) engine.start()
 }
 

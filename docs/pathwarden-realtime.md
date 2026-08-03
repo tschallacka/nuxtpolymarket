@@ -14,6 +14,12 @@ Pathwarden live runs use one authoritative server world. The browser submits sem
 | Persistence and reconnect | `server/pathwarden/session.ts` | Reconnect with pending input sequences |
 | Canvas camera, hit testing, particles, audio, debug bridge | browser | Never modify authoritative outcomes |
 
+Before a run is opened, the browser engine may prepare the seeded map and play
+the intro presentation, but it is already marked server-authoritative. It can
+change presentation-only selections, camera state, and effects; every gameplay
+mutation is either sent as a WebSocket command or ignored until the server has
+created the run. There is no offline gameplay fallback.
+
 ## Packet contract
 
 Gameplay packets use `shared/pathwarden/protocol.ts`. They are bounded binary packets, not JSON. Map compounds are split into 12 KiB chunks; all packets are capped at 64 KiB. Every input has a monotonically increasing sequence, and every authoritative snapshot acknowledges the latest applied sequence.
