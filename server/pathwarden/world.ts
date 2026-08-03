@@ -1,5 +1,11 @@
 import type { PathwardenGameState, PathwardenMapPlan, PathwardenSavedRelic } from '#shared/types/pathwarden-save'
-import { PATHWARDEN_AMBIENT_FAMILIES, PATHWARDEN_DEFENSE_BLUEPRINTS, pathwardenRelicEffects } from '#shared/utils/gamelogic/pathwarden'
+import {
+    PATHWARDEN_AMBIENT_FAMILIES,
+    PATHWARDEN_DEFENSE_BLUEPRINTS,
+    pathwardenRelicDefinition,
+    pathwardenRelicEffects,
+    pathwardenRelicOfferIds
+} from '#shared/utils/gamelogic/pathwarden'
 import type {
     PathwardenInputCommand,
     PathwardenPhase,
@@ -646,18 +652,22 @@ export class PathwardenWorld {
             this.state.aether += command.choice * 10
             if (command.type === 'relic-choice') {
                 this.state.relicPower = Math.min(5, this.state.relicPower + (command.choice + 1) * 0.1)
+                const relicId = this.choiceKeys[command.choice]
+                const definition = relicId ? pathwardenRelicDefinition(relicId) : undefined
+                if (!definition) return false
                 this.spawnRelic({
                     instanceId: this.nextRelicInstanceId++,
-                    id: `server-relic-${this.state.tick}-${command.choice}`,
-                    family: ['fire', 'frost', 'bounty'][command.choice] ?? 'fire',
-                    rarity: 'common',
-                    name: ['Flame Arrows', 'Rime Arrows', 'Verdant Bounty'][command.choice] ?? 'Server Relic',
-                    description: 'A server-authoritative Pathwarden relic.',
-                    towerSpecific: command.choice < 2,
-                    iconIndex: command.choice,
-                    power: (command.choice + 1) * 0.5,
-                    sellValue: 15 + command.choice * 5,
-                    color: '#c4b5fd'
+                    id: `${definition.id}-${this.state.tick}`,
+                    family: definition.family,
+                    rarity: definition.rarity,
+                    name: definition.name,
+                    description: definition.description,
+                    towerSpecific: definition.towerSpecific,
+                    iconIndex: definition.iconIndex,
+                    power: definition.power,
+                    sellValue: definition.sellValue,
+                    color: definition.color,
+                    effects: definition.effects
                 })
             }
             this.choiceKind = null
@@ -952,7 +962,8 @@ export class PathwardenWorld {
             iconIndex: relic.iconIndex,
             power: relic.power,
             sellValue: relic.sellValue,
-            color: relic.color ?? '#c4b5fd'
+            color: relic.color ?? '#c4b5fd',
+            effects: relic.effects
         } }, 0, 0)
     }
 
@@ -984,7 +995,7 @@ export class PathwardenWorld {
         this.state.phase = 'upgrade'
         this.choiceKind = 'relic'
         this.choices = [0, 1, 2]
-        this.choiceKeys = ['fire-common', 'frost-common', 'bounty-common']
+        this.choiceKeys = pathwardenRelicOfferIds(this.state.seed + this.state.tick)
         this.choiceRevision++
     }
 

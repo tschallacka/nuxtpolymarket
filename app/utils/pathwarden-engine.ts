@@ -2,6 +2,8 @@ import {
   PATHWARDEN_AMBIENT_STORY_COUNT,
   PATHWARDEN_AMBIENT_FAMILIES,
   PATHWARDEN_DEFENSE_BLUEPRINTS,
+  PATHWARDEN_RELICS as SHARED_PATHWARDEN_RELICS,
+  pathwardenRelicProfile as sharedPathwardenRelicProfile,
   pathwardenRelicEffects,
   type PathwardenDefenseArchetype,
   type PathwardenDefenseBlueprint,
@@ -106,38 +108,6 @@ export interface PathwardenRelicProfile {
   iconIndex: number
 }
 
-const RELIC_RARITIES: Array<{ id: PathwardenRelicRarity, label: string, power: number, sell: number }> = [
-  { id: 'common', label: 'Worn', power: 1, sell: 15 },
-  { id: 'uncommon', label: 'Runed', power: 1.45, sell: 25 },
-  { id: 'rare', label: 'Royal', power: 2.1, sell: 45 },
-  { id: 'epic', label: 'Elder', power: 3.1, sell: 80 },
-  { id: 'mythic', label: 'Mythic', power: 4.6, sell: 140 }
-]
-
-const RELIC_FAMILIES: Array<{
-  id: PathwardenRelicFamily
-  element: PathwardenRelicElement
-  name: string
-  towerSpecific: boolean
-  description: (power: number) => string
-}> = [
-  { id: 'fire', element: 'fire', name: 'Flame Arrows', towerSpecific: true, description: power => `Burns for ${Math.round(18 * power)}% base damage over 3s · +${Math.round(6 * power)}% direct damage.` },
-  { id: 'frost', element: 'frost', name: 'Rime Arrows', towerSpecific: true, description: power => `Slows by ${Math.round(22 + 4 * power)}% for 2s · +${Math.round(4 * power)}% direct damage.` },
-  { id: 'storm', element: 'lightning', name: 'Lightning Arc Arrows', towerSpecific: true, description: power => `Jumps to ${Math.min(5, 1 + Math.floor(power))} nearby foes; each jump retains ${Math.round(58 - power * 2)}% power.` },
-  { id: 'venom', element: 'poison', name: 'Venom Heads', towerSpecific: true, description: power => `Poisons for ${Math.round(24 * power)}% base damage over 4s · +${Math.round(3 * power)}% direct damage.` },
-  { id: 'blast', element: 'fire', name: 'Explosive Arrows', towerSpecific: true, description: power => `${Math.round(46 + power * 8)} feet impact burst · +${Math.round(6 * power)}% direct damage.` },
-  { id: 'leech', element: 'arcane', name: 'Sanguine Tips', towerSpecific: true, description: power => `Each hit repairs ${(0.12 * power).toFixed(2)}% keep health · +${Math.round(4 * power)}% damage.` },
-  { id: 'pierce', element: 'arcane', name: 'Kingsbane Heads', towerSpecific: true, description: power => `Ignores armor and deals +${Math.round(10 * power)}% damage; double bonus against brutes and bosses.` },
-  { id: 'chain', element: 'lightning', name: 'Lightning Paralysis Arrows', towerSpecific: true, description: power => `Every fourth shot echoes at ${Math.round(42 + power * 6)}% power.` },
-  { id: 'gale', element: 'arcane', name: 'Gale Fletching', towerSpecific: true, description: power => `This defense attacks ${Math.round(7 * power)}% faster and deals +${Math.round(2 * power)}% damage.` },
-  { id: 'radiant', element: 'sun', name: 'Sun Ray Arrows', towerSpecific: true, description: power => `Radiant hit bursts for ${Math.round(28 * power)}% damage to foes within ${Math.round(52 + power * 7)} feet.` },
-  { id: 'heart', element: 'arcane', name: 'Keepheart', towerSpecific: false, description: power => `Immediately restore ${Math.round(3 * power)} keep hearts.` },
-  { id: 'repair', element: 'arcane', name: 'Restorer’s Oath', towerSpecific: false, description: power => `Kills permanently restore ${(0.1 * power).toFixed(2)}% keep health.` },
-  { id: 'bounty', element: 'arcane', name: 'Verdant Bounty', towerSpecific: false, description: power => `Gain +${Math.round(12 * power)}% Aether from defeated enemies.` },
-  { id: 'haste', element: 'arcane', name: 'Hourglass Sigil', towerSpecific: false, description: power => `All defenses attack ${Math.round(8 * power)}% faster.` },
-  { id: 'range', element: 'arcane', name: 'Mistglass Lens', towerSpecific: false, description: power => `All defenses gain ${Math.round(7 * power)}% range.` }
-]
-
 export const PATHWARDEN_RARITY_COLORS: Record<PathwardenRelicRarity, string> = {
   common: '#94a3b8',
   uncommon: '#60a5fa',
@@ -168,28 +138,6 @@ const emptyRelicEffects = (): PathwardenRelicEffects => ({
 
 function relicEffectsFor(family: PathwardenRelicFamily, power: number, variation = 1): PathwardenRelicEffects {
   return pathwardenRelicEffects(family, power, variation)
-}
-
-function relicColorFor(family: PathwardenRelicFamily, rarity: PathwardenRelicRarity) {
-  const familyColor: Partial<Record<PathwardenRelicFamily, string>> = {
-    fire: '#fb7185',
-    frost: '#a5f3fc',
-    storm: '#fde047',
-    venom: '#86efac',
-    blast: '#fb923c',
-    leech: '#f0abfc',
-    pierce: '#c4b5fd',
-    chain: '#facc15',
-    gale: '#99f6e4',
-    radiant: '#fef3c7',
-    heart: '#fda4af',
-    repair: '#86efac',
-    bounty: '#bef264',
-    haste: '#93c5fd',
-    range: '#c4b5fd'
-  }
-  const base = familyColor[family] ?? PATHWARDEN_RARITY_COLORS[rarity]
-  return base
 }
 
 function cloneRelicEffects(effects: PathwardenRelicEffects): PathwardenRelicEffects {
@@ -232,31 +180,10 @@ export function describeRelicEffects(effects: PathwardenRelicEffects) {
   return parts.join(' · ')
 }
 
-export const PATHWARDEN_RELICS: PathwardenRelic[] = RELIC_FAMILIES.flatMap((family, iconIndex) =>
-  RELIC_RARITIES.map(rarity => ({
-    id: `${family.id}-${rarity.id}`,
-    family: family.id,
-    element: family.element,
-    rarity: rarity.id,
-    name: `${rarity.label} ${family.name}`,
-    description: family.description(rarity.power),
-    towerSpecific: family.towerSpecific,
-    iconIndex,
-    power: rarity.power,
-    sellValue: rarity.sell,
-    color: relicColorFor(family.id, rarity.id),
-    effects: relicEffectsFor(family.id, rarity.power)
-  })))
+export const PATHWARDEN_RELICS = SHARED_PATHWARDEN_RELICS as unknown as PathwardenRelic[]
 
 export function pathwardenRelicProfile(family: PathwardenRelicFamily, power: number): PathwardenRelicProfile {
-  const familyIndex = RELIC_FAMILIES.findIndex(candidate => candidate.id === family)
-  const definition = RELIC_FAMILIES[familyIndex] ?? RELIC_FAMILIES[0]!
-  return {
-    family,
-    name: definition.name,
-    description: definition.description(power),
-    iconIndex: familyIndex >= 0 ? familyIndex : 0
-  }
+  return sharedPathwardenRelicProfile(family, power)
 }
 
 interface Point { x: number, y: number }

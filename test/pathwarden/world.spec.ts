@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PathwardenWorld } from '#server/pathwarden/world'
+import { pathwardenRelicDefinition, pathwardenRelicOfferIds } from '#shared/utils/gamelogic/pathwarden'
 import { createPathwardenMapPlan } from '#shared/utils/gamelogic/pathwarden-map'
 
 const mapPlan = createPathwardenMapPlan({ seed: 1, realm: 1 })
@@ -383,5 +384,35 @@ describe('Pathwarden authoritative world', () => {
         const world = new PathwardenWorld({ runId: 'run-13', revision: 0, realm: 1, seed: 1, mapPlan, gameState: saved })
         expect(world.canApply({ type: 'checkpoint-choice', choice: 1, offerRevision: 0 })).toBe(false)
         expect(world.canApply({ type: 'checkpoint-choice', choice: 1, offerRevision: 1 })).toBe(true)
+    })
+
+    it('derives relic offers from the shared catalogue and materializes the selected definition', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-relic-catalogue', revision: 0, realm: 1, seed: 17, mapPlan, gameState: null })
+        const openRelicChoice = (world as unknown as { openRelicChoice: () => void }).openRelicChoice
+        openRelicChoice.call(world)
+        const offer = world.getChoiceOffer()!
+        expect(offer.choiceKeys).toEqual(pathwardenRelicOfferIds(17))
+        const selected = pathwardenRelicDefinition(offer.choiceKeys[1]!)!
+
+        world.enqueue(1, { type: 'relic-choice', choice: 1, offerRevision: offer.offerRevision })
+        world.start()
+        vi.advanceTimersByTime(50)
+        world.stop()
+
+        const relic = world.getEntities().find(entity => entity.data.type === 5)!
+        expect(relic.data.components).toMatchObject({
+            relicId: `${selected.id}-1`,
+            family: selected.family,
+            rarity: selected.rarity,
+            name: selected.name,
+            description: selected.description,
+            towerSpecific: selected.towerSpecific,
+            iconIndex: selected.iconIndex,
+            power: selected.power,
+            sellValue: selected.sellValue,
+            color: selected.color,
+            effects: selected.effects
+        })
     })
 })

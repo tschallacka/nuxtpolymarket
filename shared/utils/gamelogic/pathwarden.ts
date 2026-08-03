@@ -101,6 +101,98 @@ export function pathwardenRelicEffects(family: string, power: number, variation 
     return effects
 }
 
+export type PathwardenRelicRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'mythic'
+export type PathwardenRelicFamily =
+    | 'fire' | 'frost' | 'storm' | 'venom' | 'blast'
+    | 'leech' | 'pierce' | 'chain' | 'gale' | 'radiant'
+    | 'heart' | 'repair' | 'bounty' | 'haste' | 'range'
+export type PathwardenRelicElement = 'fire' | 'frost' | 'lightning' | 'poison' | 'sun' | 'arcane'
+
+export interface PathwardenRelicDefinition {
+    id: string
+    family: PathwardenRelicFamily
+    element: PathwardenRelicElement
+    rarity: PathwardenRelicRarity
+    name: string
+    description: string
+    towerSpecific: boolean
+    iconIndex: number
+    power: number
+    sellValue: number
+    color: string
+    effects: PathwardenSavedRelicEffects
+}
+
+const PATHWARDEN_RELIC_RARITIES: Array<{ id: PathwardenRelicRarity, label: string, power: number, sellValue: number }> = [
+    { id: 'common', label: 'Worn', power: 1, sellValue: 15 },
+    { id: 'uncommon', label: 'Runed', power: 1.45, sellValue: 25 },
+    { id: 'rare', label: 'Royal', power: 2.1, sellValue: 45 },
+    { id: 'epic', label: 'Elder', power: 3.1, sellValue: 80 },
+    { id: 'mythic', label: 'Mythic', power: 4.6, sellValue: 140 }
+]
+
+const PATHWARDEN_RELIC_FAMILIES: Array<{
+    id: PathwardenRelicFamily
+    element: PathwardenRelicElement
+    name: string
+    towerSpecific: boolean
+    description: (power: number) => string
+    color: string
+}> = [
+    { id: 'fire', element: 'fire', name: 'Flame Arrows', towerSpecific: true, description: power => `Burns for ${Math.round(18 * power)}% base damage over 3s · +${Math.round(6 * power)}% direct damage.`, color: '#fb7185' },
+    { id: 'frost', element: 'frost', name: 'Rime Arrows', towerSpecific: true, description: power => `Slows by ${Math.round(22 + 4 * power)}% for 2s · +${Math.round(4 * power)}% direct damage.`, color: '#a5f3fc' },
+    { id: 'storm', element: 'lightning', name: 'Lightning Arc Arrows', towerSpecific: true, description: power => `Jumps to ${Math.min(5, 1 + Math.floor(power))} nearby foes; each jump retains ${Math.round(58 - power * 2)}% power.`, color: '#fde047' },
+    { id: 'venom', element: 'poison', name: 'Venom Heads', towerSpecific: true, description: power => `Poisons for ${Math.round(24 * power)}% base damage over 4s · +${Math.round(3 * power)}% direct damage.`, color: '#86efac' },
+    { id: 'blast', element: 'fire', name: 'Explosive Arrows', towerSpecific: true, description: power => `${Math.round(46 + power * 8)} feet impact burst · +${Math.round(6 * power)}% direct damage.`, color: '#fb923c' },
+    { id: 'leech', element: 'arcane', name: 'Sanguine Tips', towerSpecific: true, description: power => `Each hit repairs ${(0.12 * power).toFixed(2)}% keep health · +${Math.round(4 * power)}% damage.`, color: '#f0abfc' },
+    { id: 'pierce', element: 'arcane', name: 'Kingsbane Heads', towerSpecific: true, description: power => `Ignores armor and deals +${Math.round(10 * power)}% damage; double bonus against brutes and bosses.`, color: '#c4b5fd' },
+    { id: 'chain', element: 'lightning', name: 'Lightning Paralysis Arrows', towerSpecific: true, description: power => `Every fourth shot echoes at ${Math.round(42 + power * 6)}% power.`, color: '#facc15' },
+    { id: 'gale', element: 'arcane', name: 'Gale Fletching', towerSpecific: true, description: power => `This defense attacks ${Math.round(7 * power)}% faster and deals +${Math.round(2 * power)}% damage.`, color: '#99f6e4' },
+    { id: 'radiant', element: 'sun', name: 'Sun Ray Arrows', towerSpecific: true, description: power => `Radiant hit bursts for ${Math.round(28 * power)}% damage to foes within ${Math.round(52 + power * 7)} feet.`, color: '#fef3c7' },
+    { id: 'heart', element: 'arcane', name: 'Keepheart', towerSpecific: false, description: power => `Immediately restore ${Math.round(3 * power)} keep hearts.`, color: '#fda4af' },
+    { id: 'repair', element: 'arcane', name: 'Restorer’s Oath', towerSpecific: false, description: power => `Kills permanently restore ${(0.1 * power).toFixed(2)}% keep health.`, color: '#86efac' },
+    { id: 'bounty', element: 'arcane', name: 'Verdant Bounty', towerSpecific: false, description: power => `Gain +${Math.round(12 * power)}% Aether from defeated enemies.`, color: '#bef264' },
+    { id: 'haste', element: 'arcane', name: 'Hourglass Sigil', towerSpecific: false, description: power => `All defenses attack ${Math.round(8 * power)}% faster.`, color: '#93c5fd' },
+    { id: 'range', element: 'arcane', name: 'Mistglass Lens', towerSpecific: false, description: power => `All defenses gain ${Math.round(7 * power)}% range.`, color: '#c4b5fd' }
+]
+
+export const PATHWARDEN_RELICS: PathwardenRelicDefinition[] = PATHWARDEN_RELIC_FAMILIES.flatMap((family, iconIndex) =>
+    PATHWARDEN_RELIC_RARITIES.map(rarity => ({
+        id: `${family.id}-${rarity.id}`,
+        family: family.id,
+        element: family.element,
+        rarity: rarity.id,
+        name: `${rarity.label} ${family.name}`,
+        description: family.description(rarity.power),
+        towerSpecific: family.towerSpecific,
+        iconIndex,
+        power: rarity.power,
+        sellValue: rarity.sellValue,
+        color: family.color,
+        effects: pathwardenRelicEffects(family.id, rarity.power)
+    }))
+)
+
+export function pathwardenRelicOfferIds(seed: number) {
+    const common = PATHWARDEN_RELICS.filter(relic => relic.rarity === 'common')
+    const start = Math.abs(Math.floor(seed)) % common.length
+    return Array.from({ length: Math.min(3, common.length) }, (_, index) => common[(start + index * 5) % common.length]!.id)
+}
+
+export function pathwardenRelicDefinition(id: string) {
+    return PATHWARDEN_RELICS.find(relic => relic.id === id)
+}
+
+export function pathwardenRelicProfile(family: PathwardenRelicFamily, power: number) {
+    const definition = PATHWARDEN_RELIC_FAMILIES.find(candidate => candidate.id === family) ?? PATHWARDEN_RELIC_FAMILIES[0]!
+    return {
+        family,
+        name: definition.name,
+        description: definition.description(power),
+        iconIndex: PATHWARDEN_RELIC_FAMILIES.indexOf(definition)
+    }
+}
+
 // Ambient stories surface on a 45-300s in-game timer, so a real player never
 // records two within 20s. Enforcing that floor server-side turns the "POST
 // storyId 1..250 in a loop" forge into a many-hour grind against an active run.
