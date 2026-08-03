@@ -1,5 +1,5 @@
 import type { PathwardenGameState, PathwardenMapPlan, PathwardenSavedRelic } from '#shared/types/pathwarden-save'
-import { PATHWARDEN_AMBIENT_FAMILIES, PATHWARDEN_DEFENSE_BLUEPRINTS } from '#shared/utils/gamelogic/pathwarden'
+import { PATHWARDEN_AMBIENT_FAMILIES, PATHWARDEN_DEFENSE_BLUEPRINTS, pathwardenRelicEffects } from '#shared/utils/gamelogic/pathwarden'
 import type {
     PathwardenInputCommand,
     PathwardenPhase,
@@ -818,7 +818,7 @@ export class PathwardenWorld {
                     : Number(right.data.components?.progress ?? 0) - Number(left.data.components?.progress ?? 0))[0]!
             const relicFamily = String(components.relicFamily ?? '')
             const relicPower = Number(components.relicPower ?? 0)
-            const relicEffects = this.relicEffects(relicFamily, relicPower)
+        const relicEffects = this.relicEffects(relicFamily, relicPower)
             this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: Math.max(1, Math.round(defense.rate * 20 / (this.boosts.rateMultiplier * (1 + relicEffects.attackSpeedPct / 100)))) } } })
             this.spawnEntity({ type: 3, components: {
                 towerType: String(components.towerType ?? 'bolt'),
@@ -928,15 +928,7 @@ export class PathwardenWorld {
     }
 
     private relicEffects(family: string, power: number) {
-        const directDamagePct: Record<string, number> = { fire: 6, frost: 4, storm: 3, venom: 3, blast: 6, leech: 4, pierce: 10, chain: 2, gale: 2, radiant: 4 }
-        return {
-            directDamagePct: (directDamagePct[family] ?? 0) * power,
-            burnPct: family === 'fire' ? 18 * power : family === 'venom' ? 24 * power : 0,
-            burnDuration: family === 'fire' ? 3 : family === 'venom' ? 4 : 0,
-            slowPct: family === 'frost' ? 22 + 4 * power : 0,
-            impactRadius: family === 'blast' ? 46 + power * 8 : family === 'radiant' ? 52 + power * 7 : 0,
-            attackSpeedPct: family === 'gale' ? 7 * power : family === 'haste' ? 8 * power : 0
-        }
+        return pathwardenRelicEffects(family, power)
     }
 
     private towerDamage(type: string, level: number, relicPower = 0, relicFamily = '') {

@@ -2,6 +2,7 @@ import {
   PATHWARDEN_AMBIENT_STORY_COUNT,
   PATHWARDEN_AMBIENT_FAMILIES,
   PATHWARDEN_DEFENSE_BLUEPRINTS,
+  pathwardenRelicEffects,
   type PathwardenDefenseArchetype,
   type PathwardenDefenseBlueprint,
   type PathwardenDefenseFamily
@@ -166,48 +167,7 @@ const emptyRelicEffects = (): PathwardenRelicEffects => ({
 })
 
 function relicEffectsFor(family: PathwardenRelicFamily, power: number, variation = 1): PathwardenRelicEffects {
-  const effects = emptyRelicEffects()
-  const directDamageRates: Partial<Record<PathwardenRelicFamily, number>> = { fire: 6, frost: 4, storm: 3, venom: 3, blast: 6, leech: 4, pierce: 10, chain: 2, gale: 2, radiant: 4 }
-  effects.directDamagePct = (directDamageRates[family] ?? 0) * power * variation
-  if (family === 'fire') {
-    effects.burnPct = 18 * power * variation
-    effects.burnDuration = 3 * variation
-  } else if (family === 'frost') {
-    effects.slowPct = (22 + 4 * power) * variation
-    effects.slowDuration = 2 * variation
-  } else if (family === 'storm') {
-    effects.chainCount = Math.min(5, 1 + Math.floor(power * variation))
-    effects.chainRetentionPct = (58 - power * 2) * variation
-  } else if (family === 'venom') {
-    effects.burnPct = 24 * power * variation
-    effects.burnDuration = 4 * variation
-  } else if (family === 'blast') {
-    effects.impactRadius = 46 + power * 8 * variation
-    effects.impactDamagePct = 6 * power * variation
-  } else if (family === 'leech') {
-    effects.repairPct = 0.12 * power * variation
-  } else if (family === 'pierce') {
-    effects.armorPiercePct = 100 * variation
-  } else if (family === 'chain') {
-    effects.echoEveryShots = 4
-    effects.echoPowerPct = (42 + power * 6) * variation
-  } else if (family === 'gale') {
-    effects.attackSpeedPct = 7 * power * variation
-  } else if (family === 'radiant') {
-    effects.impactDamagePct = 28 * power * variation
-    effects.impactRadius = 52 + power * 7 * variation
-  } else if (family === 'heart') {
-    effects.keepHealPct = 3 * power * variation
-  } else if (family === 'repair') {
-    effects.repairPct = 0.1 * power * variation
-  } else if (family === 'bounty') {
-    effects.aetherBonusPct = 12 * power * variation
-  } else if (family === 'haste') {
-    effects.attackSpeedPct = 8 * power * variation
-  } else if (family === 'range') {
-    effects.rangePct = 7 * power * variation
-  }
-  return effects
+  return pathwardenRelicEffects(family, power, variation)
 }
 
 function relicColorFor(family: PathwardenRelicFamily, rarity: PathwardenRelicRarity) {

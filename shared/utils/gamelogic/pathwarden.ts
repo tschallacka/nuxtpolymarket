@@ -1,3 +1,5 @@
+import type { PathwardenSavedRelicEffects } from '#shared/types/pathwarden-save'
+
 export const PATHWARDEN_BOOST_IDS = ['bulwark', 'artificer', 'lens', 'reservoir', 'banner', 'bounty', 'arcanist'] as const
 export type PathwardenBoostId = typeof PATHWARDEN_BOOST_IDS[number]
 export type PathwardenBoostCurrency = 'coins' | 'gems'
@@ -35,6 +37,69 @@ export const PATHWARDEN_AMBIENT_FAMILIES = [
     { name: 'Royal inspection', kind: 'patrol' },
     { name: 'Midnight oddities', kind: 'bird' }
 ] as const
+
+export function pathwardenRelicEffects(family: string, power: number, variation = 1): PathwardenSavedRelicEffects {
+    const effects: PathwardenSavedRelicEffects = {
+        directDamagePct: 0,
+        burnPct: 0,
+        burnDuration: 0,
+        slowPct: 0,
+        slowDuration: 0,
+        chainCount: 0,
+        chainRetentionPct: 0,
+        impactRadius: 0,
+        impactDamagePct: 0,
+        repairPct: 0,
+        armorPiercePct: 0,
+        echoEveryShots: 0,
+        echoPowerPct: 0,
+        attackSpeedPct: 0,
+        rangePct: 0,
+        aetherBonusPct: 0,
+        keepHealPct: 0
+    }
+    const directDamageRates: Record<string, number> = { fire: 6, frost: 4, storm: 3, venom: 3, blast: 6, leech: 4, pierce: 10, chain: 2, gale: 2, radiant: 4 }
+    effects.directDamagePct = (directDamageRates[family] ?? 0) * power * variation
+    if (family === 'fire') {
+        effects.burnPct = 18 * power * variation
+        effects.burnDuration = 3 * variation
+    } else if (family === 'frost') {
+        effects.slowPct = (22 + 4 * power) * variation
+        effects.slowDuration = 2 * variation
+    } else if (family === 'storm') {
+        effects.chainCount = Math.min(5, 1 + Math.floor(power * variation))
+        effects.chainRetentionPct = (58 - power * 2) * variation
+    } else if (family === 'venom') {
+        effects.burnPct = 24 * power * variation
+        effects.burnDuration = 4 * variation
+    } else if (family === 'blast') {
+        effects.impactRadius = 46 + power * 8 * variation
+        effects.impactDamagePct = 6 * power * variation
+    } else if (family === 'leech') {
+        effects.repairPct = 0.12 * power * variation
+    } else if (family === 'pierce') {
+        effects.armorPiercePct = 100 * variation
+    } else if (family === 'chain') {
+        effects.echoEveryShots = 4
+        effects.echoPowerPct = (42 + power * 6) * variation
+    } else if (family === 'gale') {
+        effects.attackSpeedPct = 7 * power * variation
+    } else if (family === 'radiant') {
+        effects.impactDamagePct = 28 * power * variation
+        effects.impactRadius = 52 + power * 7 * variation
+    } else if (family === 'heart') {
+        effects.keepHealPct = 3 * power * variation
+    } else if (family === 'repair') {
+        effects.repairPct = 0.1 * power * variation
+    } else if (family === 'bounty') {
+        effects.aetherBonusPct = 12 * power * variation
+    } else if (family === 'haste') {
+        effects.attackSpeedPct = 8 * power * variation
+    } else if (family === 'range') {
+        effects.rangePct = 7 * power * variation
+    }
+    return effects
+}
 
 // Ambient stories surface on a 45-300s in-game timer, so a real player never
 // records two within 20s. Enforcing that floor server-side turns the "POST

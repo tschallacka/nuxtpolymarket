@@ -6,6 +6,7 @@ import {
 } from '#server/utils/pathwarden'
 import {
     PATHWARDEN_MIN_SECONDS_PER_WAVE,
+    pathwardenRelicEffects,
     pathwardenMaxScore,
     pathwardenMaxWaveForElapsedMs
 } from '#shared/utils/gamelogic/pathwarden'
@@ -167,5 +168,20 @@ describe('pathwarden wall-clock caps', () => {
         expect(pathwardenMaxScore(0, 5)).toBe(0)
         expect(pathwardenMaxScore(12, 5)).toBe(250_000_000)
         expect(pathwardenMaxScore(6, 5)).toBeLessThan(pathwardenMaxScore(12, 5))
+    })
+})
+
+describe('pathwarden shared relic formulas', () => {
+    it('exposes the same complete effect shape to server and prediction clients', () => {
+        const effects = pathwardenRelicEffects('storm', 2)
+
+        expect(effects).toMatchObject({
+            directDamagePct: 6,
+            chainCount: 3,
+            chainRetentionPct: 54,
+            burnPct: 0,
+            rangePct: 0
+        })
+        expect(Object.keys(effects)).toHaveLength(17)
     })
 })
