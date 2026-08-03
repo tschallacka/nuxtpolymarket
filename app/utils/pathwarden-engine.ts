@@ -3926,9 +3926,15 @@ export class PathwardenEngine {
   }
 
   private extendPath(choice: PathChoice) {
-    if (this.phase !== 'path' || !this.pathChoices.includes(choice)) return
+    if (!this.pathChoices.includes(choice)) return
+    if (this.serverAuthoritative) {
+      this.callbacks.onCommand?.({ type: 'claim-path', choice: this.pathChoices.indexOf(choice), offerRevision: this.authoritativeChoiceRevision })
+      this.message = 'Frontier claim command sent to the Warden.'
+      this.emitState()
+      return
+    }
+    if (this.phase !== 'path') return
     this.callbacks.onCommand?.({ type: 'claim-path', choice: this.pathChoices.indexOf(choice), offerRevision: this.authoritativeChoiceRevision })
-    if (this.serverAuthoritative) return
     this.persistCurrentPathLinks()
     const links = choice.links ?? choice.cells.map((cell, index) => ({
       from: index === 0 ? choice.source : choice.cells[index - 1]!,
@@ -4349,7 +4355,7 @@ export class PathwardenEngine {
     if (this.introStoryActive || this.openingCinematicActive) return
     if (event.button !== 0) return
     this.noteActivity()
-    if (this.phase !== 'planning') return
+    if (this.phase !== 'planning' && !this.serverAuthoritative) return
     const tower = this.pointerTower(event)
     if (!tower) return
     this.towerDrag = { towerId: tower.id, startX: event.clientX, startY: event.clientY, active: false }
@@ -4400,6 +4406,17 @@ export class PathwardenEngine {
     if (!targetCell) return
     const target = this.towers.find(candidate =>
       candidate.id !== tower.id && candidate.col === targetCell.col && candidate.row === targetCell.row)
+    if (this.serverAuthoritative) {
+      if (target) {
+        this.callbacks.onCommand?.({ type: 'fuse-tower', sourceId: tower.id, targetId: target.id })
+        this.message = 'Fusion command sent to the Warden.'
+      } else {
+        this.callbacks.onCommand?.({ type: 'move-tower', id: tower.id, col: targetCell.col, row: targetCell.row })
+        this.message = 'Reposition command sent to the Warden.'
+      }
+      this.emitState()
+      return
+    }
     if (target) {
       if (target.type !== tower.type || target.level !== tower.level) {
         this.message = 'Only equal defenses of the same type and level can be fused.'
