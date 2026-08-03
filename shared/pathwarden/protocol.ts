@@ -16,7 +16,8 @@ export const enum PathwardenPacketKind {
     MapSnapshot = 11,
     MapSnapshotChunk = 12,
     EntitySnapshot = 13,
-    ChoiceOffer = 14
+    ChoiceOffer = 14,
+    EntityDelta = 15
 }
 
 export type PathwardenPhase = 'planning' | 'wave' | 'checkpoint' | 'path' | 'upgrade' | 'cashout' | 'victory' | 'defeat'
@@ -60,6 +61,11 @@ export interface PathwardenEntityState {
     v2: number
     v3: number
     components?: Record<string, number | string | boolean>
+}
+
+export interface PathwardenEntityDelta {
+    upserts: PathwardenEntityState[]
+    removed: number[]
 }
 
 export type PathwardenInputCommand =
@@ -330,7 +336,7 @@ function readHeader(reader: ByteReader): PathwardenPacketHeader {
     if (reader.u8() !== PATHWARDEN_PROTOCOL_MAGIC) throw new Error('Invalid Pathwarden packet magic')
     if (reader.u8() !== PATHWARDEN_PROTOCOL_VERSION) throw new Error('Unsupported Pathwarden protocol version')
     const kind = reader.u8()
-    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.ChoiceOffer) throw new Error('Unknown Pathwarden packet kind')
+    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.EntityDelta) throw new Error('Unknown Pathwarden packet kind')
     const flags = reader.u8()
     const schema = reader.u8()
     reader.u8()
@@ -444,6 +450,26 @@ export function encodeEntitySnapshot(entities: PathwardenEntityState[], header: 
         payload.value(entity.components ?? null)
     }
     return encodePacket({ kind: PathwardenPacketKind.EntitySnapshot, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
+}
+
+export function encodeEntityDelta(delta: PathwardenEntityDelta, header: Partial<PathwardenPacketHeader> = {}) {
+    if (delta.upserts.length > 10_000 || delta.removed.length > 10_000) throw new Error('Pathwarden entity delta exceeds protocol limit')
+    const payload = new ByteWriter()
+    payload.varUint(delta.upserts.length)
+    for (const entity of delta.upserts) {
+        payload.varUint(entity.id)
+        payload.u8(entity.type)
+        payload.value(entity.x)
+        payload.value(entity.y)
+        payload.value(entity.z)
+        payload.value(entity.v1)
+        payload.value(entity.v2)
+        payload.value(entity.v3)
+        payload.value(entity.components ?? null)
+    }
+    payload.varUint(delta.removed.length)
+    for (const id of delta.removed) payload.varUint(id)
+    return encodePacket({ kind: PathwardenPacketKind.EntityDelta, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
 export function encodeChoiceOffer(kind: 'checkpoint' | 'relic' | 'path', choices: number[], header: Partial<PathwardenPacketHeader> = {}, offerRevision = 0) {
@@ -595,6 +621,22 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
             v3: payloadReader.value() as number,
             components: (payloadReader.value() as Record<string, number | string | boolean> | null) ?? undefined
         }))
+    } else if (header.kind === PathwardenPacketKind.EntityDelta) {
+        const upsertCount = payloadReader.varUint()
+        const upserts = Array.from({ length: upsertCount }, () => ({
+            id: payloadReader.varUint(),
+            type: payloadReader.u8(),
+            x: payloadReader.value() as number,
+            y: payloadReader.value() as number,
+            z: payloadReader.value() as number,
+            v1: payloadReader.value() as number,
+            v2: payloadReader.value() as number,
+            v3: payloadReader.value() as number,
+            components: (payloadReader.value() as Record<string, number | string | boolean> | null) ?? undefined
+        }))
+        const removedCount = payloadReader.varUint()
+        if (upsertCount > 10_000 || removedCount > 10_000) throw new Error('Pathwarden entity delta exceeds protocol limit')
+        payload = { upserts, removed: Array.from({ length: removedCount }, () => payloadReader.varUint()) }
     } else if (header.kind === PathwardenPacketKind.ChoiceOffer) {
         const kind = payloadReader.u8()
         const offerRevision = payloadReader.u32()

@@ -76,6 +76,14 @@ export function usePathwardenRealtime() {
                 entities.value = packet.payload as PathwardenEntityState[]
                 return
             }
+            if (packet.header.kind === PathwardenPacketKind.EntityDelta) {
+                const delta = packet.payload as { upserts: PathwardenEntityState[], removed: number[] }
+                const next = new Map(entities.value.map(entity => [entity.id, entity]))
+                for (const id of delta.removed) next.delete(id)
+                for (const entity of delta.upserts) next.set(entity.id, entity)
+                entities.value = [...next.values()]
+                return
+            }
             if (packet.header.kind === PathwardenPacketKind.ChoiceOffer) {
                 choiceOffer.value = packet.payload as { kind: 'checkpoint' | 'relic' | 'path', choices: number[], offerRevision: number }
                 return

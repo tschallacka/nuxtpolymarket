@@ -5,6 +5,7 @@ import { pathwardenRuns } from '#server/database/schema'
 import { auth } from '#server/utils/auth'
 import { recordPathwardenAmbientStory } from '#server/utils/pathwarden'
 import { PathwardenWorld } from '#server/pathwarden/world'
+import type { PathwardenEntity } from '#server/pathwarden/world'
 import {
     pathwardenMetricCommand,
     pathwardenMetricConnection,
@@ -15,6 +16,7 @@ import {
 import {
     decodePacket,
     encodeCommandAck,
+    encodeEntityDelta,
     encodeEntitySnapshot,
     encodeChoiceOffer,
     encodeHelloAck,
@@ -22,6 +24,7 @@ import {
     encodeProtocolError,
     encodeWorldSnapshot,
     PathwardenPacketKind,
+    type PathwardenEntityState,
     type PathwardenInputCommand
 } from '#shared/pathwarden/protocol'
 
@@ -36,6 +39,7 @@ interface ActiveSession {
     persistPromise: Promise<void> | null
     commandWindowStartedAt: number
     commandsInWindow: number
+    lastEntities: Map<number, PathwardenEntityState>
 }
 
 const sessions = new Map<string, ActiveSession>()
@@ -98,8 +102,27 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
         lastPersistedTick: -1,
         persistPromise: null,
         commandWindowStartedAt: Date.now(),
-        commandsInWindow: 0
+        commandsInWindow: 0,
+        lastEntities: new Map()
     }
+}
+
+function entityState(entity: PathwardenEntity): PathwardenEntityState {
+    return {
+        id: entity.id,
+        type: entity.data.type,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        v1: entity.v1,
+        v2: entity.v2,
+        v3: entity.v3,
+        components: entity.data.components
+    }
+}
+
+function entityChanged(left: PathwardenEntityState, right: PathwardenEntityState) {
+    return JSON.stringify(left) !== JSON.stringify(right)
 }
 
 function persistWorld(session: ActiveSession, tick: number, terminal: boolean) {
@@ -170,17 +193,15 @@ export async function openPathwardenSession(peer: Peer) {
         pathwardenMetricDisconnection()
     }
     session.world.setChangeHandler((snapshot, entities) => {
-        send(session, encodeEntitySnapshot(entities.map(entity => ({
-            id: entity.id,
-            type: entity.data.type,
-            x: entity.x,
-            y: entity.y,
-            z: entity.z,
-            v1: entity.v1,
-            v2: entity.v2,
-            v3: entity.v3,
-            components: entity.data.components
-        })), { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
+        const nextEntities = entities.map(entityState)
+        const upserts = nextEntities.filter(entity => {
+            const previous = session.lastEntities.get(entity.id)
+            return !previous || entityChanged(previous, entity)
+        })
+        const nextIds = new Set(nextEntities.map(entity => entity.id))
+        const removed = [...session.lastEntities.keys()].filter(id => !nextIds.has(id))
+        session.lastEntities = new Map(nextEntities.map(entity => [entity.id, entity]))
+        send(session, encodeEntityDelta({ upserts, removed }, { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
         send(session, encodeWorldSnapshot(snapshot, { sequence: session.nextPacketSequence++, acknowledgedInput: session.world.lastAppliedInput }))
         const offer = session.world.getChoiceOffer()
         if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: snapshot.tick }, offer.offerRevision))
@@ -196,17 +217,9 @@ export async function openPathwardenSession(peer: Peer) {
         send(session, packet)
         session.nextPacketSequence++
     }
-    send(session, encodeEntitySnapshot(session.world.getEntities().map(entity => ({
-        id: entity.id,
-        type: entity.data.type,
-        x: entity.x,
-        y: entity.y,
-        z: entity.z,
-        v1: entity.v1,
-        v2: entity.v2,
-        v3: entity.v3,
-        components: entity.data.components
-    })), { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }))
+    const initialEntities = session.world.getEntities().map(entityState)
+    session.lastEntities = new Map(initialEntities.map(entity => [entity.id, entity]))
+    send(session, encodeEntitySnapshot(initialEntities, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }))
     send(session, encodeWorldSnapshot(session.world.getSnapshot(), { sequence: session.nextPacketSequence++ }))
     const offer = session.world.getChoiceOffer()
     if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }, offer.offerRevision))

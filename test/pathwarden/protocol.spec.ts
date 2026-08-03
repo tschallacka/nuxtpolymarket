@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     decodePacket,
     decodeCompound,
+    encodeEntityDelta,
     encodeEntitySnapshot,
     encodeChoiceOffer,
     encodeMapSnapshotChunks,
@@ -118,6 +119,19 @@ describe('Pathwarden binary gameplay protocol', () => {
             v3: 0,
             components: { towerType: 'bolt', col: 12, row: 13 }
         }])
+    })
+
+    it('round-trips compact entity lifecycle deltas', () => {
+        const packet = encodeEntityDelta({
+            upserts: [{ id: 4, type: 3, x: 12, y: 13, z: 0, v1: 0, v2: 0, v3: 0, components: { targetId: 9, progress: 0.5 } }],
+            removed: [2, 7]
+        }, { tick: 18 })
+        const decoded = decodePacket(packet)
+        expect(decoded.header.kind).toBe(PathwardenPacketKind.EntityDelta)
+        expect(decoded.payload).toEqual({
+            upserts: [{ id: 4, type: 3, x: 12, y: 13, z: 0, v1: 0, v2: 0, v3: 0, components: { targetId: 9, progress: 0.5 } }],
+            removed: [2, 7]
+        })
     })
 
     it('round-trips bounded server choice offers and choice commands', () => {
