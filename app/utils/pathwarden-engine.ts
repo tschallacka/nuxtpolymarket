@@ -1184,6 +1184,13 @@ export class PathwardenEngine {
 
   togglePause() {
     if (this.phase === 'defeat' || this.phase === 'victory') return
+    if (this.serverAuthoritative) {
+      const nextPaused = !this.paused
+      this.callbacks.onCommand?.({ type: 'pause', value: nextPaused })
+      this.message = nextPaused ? 'Pause command sent to the Warden.' : 'Resume command sent to the Warden.'
+      this.emitState()
+      return
+    }
     this.paused = !this.paused
     this.noteActivity()
     this.message = this.paused ? 'Time is held by the Warden.' : 'The horde moves once more.'
@@ -1443,6 +1450,12 @@ export class PathwardenEngine {
   startWave() {
     if (this.phase !== 'planning' || this.pendingWaveStart) return
     if (this.introStoryActive || this.openingCinematicActive) return
+    if (this.serverAuthoritative) {
+      this.callbacks.onCommand?.({ type: 'start-wave' })
+      this.message = 'Wave command sent to the Warden.'
+      this.emitState()
+      return
+    }
     if (this.ambientActors.some(actor => actor.kind !== 'bird')) {
       this.pendingWaveStart = true
       this.ambientEvacuation = 1.35
