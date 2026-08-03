@@ -34,7 +34,11 @@ export function usePathwardenRealtime() {
     const lastError = ref<string | null>(null)
     const lastAcknowledgedInput = ref(0)
     const corrections = ref(0)
+    const roundTripLatencyMs = ref(0)
+    const maxTickGap = ref(0)
+    const staleSnapshots = ref(0)
     const pending = new Map<number, PathwardenInputCommand>()
+    const sentAt = new Map<number, number>()
     let socket: WebSocket | null = null
     let nextInputSequence = 1
     let activeRunId: string | null = null
@@ -68,6 +72,11 @@ export function usePathwardenRealtime() {
                     : decoded
                 const wasDifferent = snapshot.value && (snapshot.value.tick > next.tick || snapshot.value.phase !== next.phase || snapshot.value.wave !== next.wave)
                 if (wasDifferent) corrections.value += 1
+                if (snapshot.value) {
+                    const tickGap = next.tick - snapshot.value.tick
+                    if (tickGap < 0) staleSnapshots.value += 1
+                    else maxTickGap.value = Math.max(maxTickGap.value, tickGap)
+                }
                 snapshot.value = next
                 const expectedChoiceKind = next.phase === 'checkpoint'
                     ? 'checkpoint'
@@ -77,7 +86,14 @@ export function usePathwardenRealtime() {
                 if (!expectedChoiceKind || choiceOffer.value?.kind !== expectedChoiceKind) choiceOffer.value = null
                 lastAcknowledgedInput.value = Math.max(lastAcknowledgedInput.value, packet.header.acknowledgedInput)
                 for (const inputSequence of pending.keys()) {
-                    if (inputSequence <= packet.header.acknowledgedInput) pending.delete(inputSequence)
+                    if (inputSequence <= packet.header.acknowledgedInput) {
+                        pending.delete(inputSequence)
+                        const startedAt = sentAt.get(inputSequence)
+                        if (startedAt !== undefined) {
+                            roundTripLatencyMs.value = Math.round((roundTripLatencyMs.value * 3 + (Date.now() - startedAt)) / 4)
+                            sentAt.delete(inputSequence)
+                        }
+                    }
                 }
                 reconcile(next)
                 return
@@ -146,6 +162,11 @@ export function usePathwardenRealtime() {
                 const payload = packet.payload as { inputSequence?: number, accepted?: boolean, reason?: string } | null
                 const inputSequence = payload?.inputSequence ?? packet.header.acknowledgedInput
                 pending.delete(inputSequence)
+                const startedAt = sentAt.get(inputSequence)
+                if (startedAt !== undefined) {
+                    roundTripLatencyMs.value = Math.round((roundTripLatencyMs.value * 3 + (Date.now() - startedAt)) / 4)
+                    sentAt.delete(inputSequence)
+                }
                 lastAcknowledgedInput.value = Math.max(lastAcknowledgedInput.value, inputSequence)
                 if (!payload?.accepted && payload?.reason) lastError.value = payload.reason
                 if (snapshot.value) reconcile(snapshot.value)
@@ -170,6 +191,7 @@ export function usePathwardenRealtime() {
         socket = null
         status.value = 'disconnected'
         pending.clear()
+        sentAt.clear()
         snapshot.value = null
         mapPlan.value = null
         entities.value = []
@@ -197,6 +219,7 @@ export function usePathwardenRealtime() {
                 status.value = 'connected'
                 socket?.send(encodeHello())
                 for (const [inputSequence, command] of pending) {
+                    sentAt.set(inputSequence, Date.now())
                     socket?.send(encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0))
                 }
             }
@@ -224,6 +247,7 @@ export function usePathwardenRealtime() {
     function send(command: PathwardenInputCommand) {
         const inputSequence = nextInputSequence++
         pending.set(inputSequence, command)
+        sentAt.set(inputSequence, Date.now())
         if (predictedSnapshot.value) reconcile(predictedSnapshot.value)
         if (socket?.readyState === WebSocket.OPEN) socket.send(encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0))
         return inputSequence
@@ -241,6 +265,9 @@ export function usePathwardenRealtime() {
         pendingInputs: computed(() => pending.size),
         lastAcknowledgedInput: readonly(lastAcknowledgedInput),
         corrections: readonly(corrections),
+        roundTripLatencyMs: readonly(roundTripLatencyMs),
+        maxTickGap: readonly(maxTickGap),
+        staleSnapshots: readonly(staleSnapshots),
         connect,
         send,
         close
