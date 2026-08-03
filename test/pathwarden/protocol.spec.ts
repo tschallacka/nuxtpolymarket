@@ -27,7 +27,9 @@ describe('Pathwarden binary gameplay protocol', () => {
             score: 9001,
             relicPower: 0.4,
             paused: false,
-            entityCount: 42
+            entityCount: 42,
+            claimedRoomIds: ['castle'],
+            revealedCells: [{ col: 4, row: 8 }]
         }, { sequence: 9, acknowledgedInput: 8 })
         const decoded = decodePacket(packet)
         expect(decoded.header.kind).toBe(PathwardenPacketKind.FullSnapshot)
@@ -45,7 +47,9 @@ describe('Pathwarden binary gameplay protocol', () => {
             score: 9001,
             relicPower: 0.4,
             paused: false,
-            entityCount: 42
+            entityCount: 42,
+            claimedRoomIds: ['castle'],
+            revealedCells: [{ col: 4, row: 8 }]
         })
     })
 

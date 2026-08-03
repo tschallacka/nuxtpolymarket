@@ -1204,6 +1204,8 @@ export class PathwardenEngine {
     aether: number
     score: number
     paused: boolean
+    claimedRoomIds?: string[]
+    revealedCells?: Array<{ col: number, row: number }>
   }) {
     if (this.destroyed) return
     this.phase = authoritative.phase as PathwardenPhase
@@ -1212,7 +1214,28 @@ export class PathwardenEngine {
     this.aether = Math.max(0, authoritative.aether)
     this.score = Math.max(0, authoritative.score)
     this.paused = authoritative.paused
+    if (authoritative.claimedRoomIds && authoritative.revealedCells) {
+      this.applyAuthoritativeMapState(authoritative.claimedRoomIds, authoritative.revealedCells)
+    }
     this.emitState()
+  }
+
+  private applyAuthoritativeMapState(claimedRoomIds: string[], revealedCells: Array<{ col: number, row: number }>) {
+    const claimed = new Set(claimedRoomIds)
+    this.claimedSections = new Set(this.plannedSections.filter(section => claimed.has(section.roomId ?? section.id)))
+    this.branchRoads = []
+    this.branchLinks = []
+    this.revealed = new Set(revealedCells.map(cellKey))
+    for (const section of this.claimedSections) {
+      for (const link of section.links ?? []) this.addCommittedRoadLink(link.from, link.to)
+      for (const cell of section.cells) {
+        if (!this.branchRoads.some(road => cellKey(road) === cellKey(cell))) this.branchRoads.push({ ...cell })
+      }
+    }
+    this.seedCastleCrossroads()
+    this.pathChoices = []
+    for (const roomId of claimed) this.activatePlannedChoices(roomId)
+    this.refreshChoiceAnchors()
   }
 
   applyAuthoritativeMapPlan(mapPlan: PathwardenMapPlan) {
@@ -3932,6 +3955,7 @@ export class PathwardenEngine {
   private extendPath(choice: PathChoice) {
     if (this.phase !== 'path' || !this.pathChoices.includes(choice)) return
     this.callbacks.onCommand?.({ type: 'claim-path', choice: this.pathChoices.indexOf(choice) })
+    if (this.serverAuthoritative) return
     this.persistCurrentPathLinks()
     const links = choice.links ?? choice.cells.map((cell, index) => ({
       from: index === 0 ? choice.source : choice.cells[index - 1]!,

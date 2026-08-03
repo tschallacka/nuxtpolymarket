@@ -106,7 +106,9 @@ export class PathwardenWorld {
             score: Math.max(0, source.gameState?.score ?? 0),
             relicPower: Math.max(0, Number(source.gameState?.globalRelics?.server?.power ?? 0)),
             paused: source.gameState?.paused === true,
-            entityCount: 0
+            entityCount: 0,
+            claimedRoomIds: [...this.claimedRooms],
+            revealedCells: []
         }
         this.lastInputSequence = Math.max(0, Math.floor(source.gameState?.lastInputSequence ?? 0))
         this.towerPurchases = { ...(source.gameState?.towerPurchases ?? {}) }
@@ -172,7 +174,14 @@ export class PathwardenWorld {
     }
 
     getSnapshot() {
-        return { ...this.state }
+        return {
+            ...this.state,
+            claimedRoomIds: [...this.claimedRooms],
+            revealedCells: [...this.revealed].map(key => {
+                const [col = 0, row = 0] = key.split(':').map(Number)
+                return { col, row }
+            })
+        }
     }
 
     spawnEntity(data: PathwardenEntityData, x: number, y: number, z = 0, v1 = 0, v2 = 0, v3 = 0) {

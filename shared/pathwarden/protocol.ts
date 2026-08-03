@@ -44,6 +44,8 @@ export interface PathwardenWorldSnapshot {
     relicPower: number
     paused: boolean
     entityCount: number
+    claimedRoomIds: string[]
+    revealedCells: Array<{ col: number, row: number }>
 }
 
 export interface PathwardenEntityState {
@@ -377,6 +379,13 @@ export function encodeWorldSnapshot(snapshot: PathwardenWorldSnapshot, header: P
     payload.u16(Math.max(0, Math.round(snapshot.relicPower * 100)))
     payload.bool(snapshot.paused)
     payload.varUint(snapshot.entityCount)
+    payload.varUint(snapshot.claimedRoomIds.length)
+    for (const roomId of snapshot.claimedRoomIds) payload.string(roomId, 96)
+    payload.varUint(snapshot.revealedCells.length)
+    for (const cell of snapshot.revealedCells) {
+        payload.u16(cell.col)
+        payload.u16(cell.row)
+    }
     return encodePacket({ kind: PathwardenPacketKind.FullSnapshot, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: snapshot.tick, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
@@ -508,7 +517,9 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
             score: payloadReader.u32(),
             relicPower: payloadReader.u16() / 100,
             paused: payloadReader.bool(),
-            entityCount: payloadReader.varUint()
+            entityCount: payloadReader.varUint(),
+            claimedRoomIds: Array.from({ length: payloadReader.varUint() }, () => payloadReader.string(96)),
+            revealedCells: Array.from({ length: payloadReader.varUint() }, () => ({ col: payloadReader.u16(), row: payloadReader.u16() }))
         }
     } else if (header.kind === PathwardenPacketKind.InputCommand) {
         const inputSequence = payloadReader.varUint()
