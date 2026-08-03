@@ -48,3 +48,8 @@ Add the feature in this order:
 6. Keep particles, interpolation, audio, and layout local. Do not add a second outcome calculation to the browser.
 
 The Pathwarden development bridge is intentionally scoped to Pathwarden visual QA. Other games must not import or register it.
+
+The optional Battle simulator is not a client simulation: its authenticated
+`POST /api/pathwarden/simulate` endpoint runs the bounded analysis on the
+server, and the browser only renders the returned report. It never shares or
+mutates a live run.
