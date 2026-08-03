@@ -42,11 +42,13 @@ export interface PathwardenWorldSnapshot {
     phase: PathwardenPhase
     wave: number
     lives: number
+    maxLives?: number
     aether: number
     score: number
     streak: number
     flawlessWaves: number
     relicPower: number
+    globalRelics?: Array<{ family: string, level: number, power: number }>
     paused: boolean
     entityCount: number
     claimedRoomIds: string[]
@@ -412,11 +414,18 @@ export function encodeWorldSnapshot(snapshot: PathwardenWorldSnapshot, header: P
     payload.u8(phaseToCode[snapshot.phase])
     payload.u8(snapshot.wave)
     payload.u16(snapshot.lives)
+    payload.u16(snapshot.maxLives ?? snapshot.lives)
     payload.u32(Math.max(0, Math.round(snapshot.aether * 100)))
     payload.u32(snapshot.score)
     payload.u16(snapshot.streak)
     payload.u16(snapshot.flawlessWaves)
     payload.u16(Math.max(0, Math.round(snapshot.relicPower * 100)))
+    payload.varUint(snapshot.globalRelics?.length ?? 0)
+    for (const relic of snapshot.globalRelics ?? []) {
+        payload.string(relic.family, 32)
+        payload.u16(relic.level)
+        payload.u16(Math.max(0, Math.round(relic.power * 100)))
+    }
     payload.bool(snapshot.paused)
     payload.varUint(snapshot.entityCount)
     if (includeMapState) {
@@ -619,11 +628,17 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
             phase: codeToPhase[payloadReader.u8()] ?? 'planning',
             wave: payloadReader.u8(),
             lives: payloadReader.u16(),
+            maxLives: payloadReader.u16(),
             aether: payloadReader.u32() / 100,
             score: payloadReader.u32(),
             streak: payloadReader.u16(),
             flawlessWaves: payloadReader.u16(),
             relicPower: payloadReader.u16() / 100,
+            globalRelics: Array.from({ length: payloadReader.varUint() }, () => ({
+                family: payloadReader.string(32),
+                level: payloadReader.u16(),
+                power: payloadReader.u16() / 100
+            })),
             paused: payloadReader.bool(),
             entityCount: payloadReader.varUint(),
             claimedRoomIds: (header.flags & 1) === 0 ? Array.from({ length: payloadReader.varUint() }, () => payloadReader.string(96)) : [],

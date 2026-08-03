@@ -304,6 +304,8 @@ export class PathwardenWorld {
     getSnapshot() {
         return {
             ...this.state,
+            maxLives: this.maxLives,
+            globalRelics: Object.entries(this.globalRelics).map(([family, relic]) => ({ family, level: relic.level, power: relic.power })),
             claimedRoomIds: [...this.claimedRooms],
             revealedCells: [...this.revealed].map(key => {
                 const [col = 0, row = 0] = key.split(':').map(Number)

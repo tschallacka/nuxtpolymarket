@@ -1073,11 +1073,13 @@ export class PathwardenEngine {
     phase: string
     wave: number
     lives: number
+    maxLives?: number
     aether: number
     score: number
     streak?: number
     flawlessWaves?: number
     paused: boolean
+    globalRelics?: ReadonlyArray<{ family: string, level: number, power: number }>
     claimedRoomIds?: readonly string[]
     revealedCells?: ReadonlyArray<{ col: number, row: number }>
   }) {
@@ -1085,11 +1087,28 @@ export class PathwardenEngine {
     this.phase = authoritative.phase as PathwardenPhase
     this.wave = Math.max(0, authoritative.wave)
     this.lives = Math.max(0, authoritative.lives)
+    this.maxLives = Math.max(this.lives, authoritative.maxLives ?? this.maxLives)
     this.aether = Math.max(0, authoritative.aether)
     this.score = Math.max(0, authoritative.score)
     this.streak = Math.max(0, authoritative.streak ?? this.streak)
     this.flawlessWaves = Math.max(0, authoritative.flawlessWaves ?? this.flawlessWaves)
     this.paused = authoritative.paused
+    if (authoritative.globalRelics) {
+      this.globalRelics = Object.fromEntries(authoritative.globalRelics.map(global => {
+        const family = global.family as PathwardenGlobalRelicFamily
+        const profile = pathwardenRelicProfile(family, global.power)
+        return [family, {
+          family,
+          level: global.level,
+          power: global.power,
+          name: profile.name,
+          description: profile.description,
+          iconIndex: profile.iconIndex,
+          effects: relicEffectsFor(family, global.power),
+          color: this.relicColor(family)
+        }]
+      })) as typeof this.globalRelics
+    }
     if (authoritative.claimedRoomIds && authoritative.revealedCells) {
       this.applyAuthoritativeMapState(authoritative.claimedRoomIds, authoritative.revealedCells)
     }
