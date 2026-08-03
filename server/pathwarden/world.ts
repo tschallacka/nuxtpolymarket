@@ -58,6 +58,9 @@ export class PathwardenWorld {
     private nextEntityId = 1
     private selectedTower = 'bolt'
     private towerPurchases: Record<string, number> = {}
+    private waveStartingLives = 20
+    private streak = 0
+    private flawlessWaves = 0
     private spawnRemaining = 0
     private spawnCooldown = 0
     private ambientCooldown = 0
@@ -104,6 +107,8 @@ export class PathwardenWorld {
             lives: Math.max(0, source.gameState?.lives ?? 20),
             aether: Math.max(0, source.gameState?.aether ?? 205),
             score: Math.max(0, source.gameState?.score ?? 0),
+            streak: Math.max(0, source.gameState?.streak ?? 0),
+            flawlessWaves: Math.max(0, source.gameState?.flawlessWaves ?? 0),
             relicPower: Math.max(0, Number(source.gameState?.globalRelics?.server?.power ?? 0)),
             paused: source.gameState?.paused === true,
             entityCount: 0,
@@ -113,6 +118,9 @@ export class PathwardenWorld {
         this.lastInputSequence = Math.max(0, Math.floor(source.gameState?.lastInputSequence ?? 0))
         this.towerPurchases = { ...(source.gameState?.towerPurchases ?? {}) }
         this.selectedTower = source.gameState?.selectedTower ?? 'bolt'
+        this.waveStartingLives = Math.max(0, source.gameState?.lives ?? this.state.lives)
+        this.streak = this.state.streak
+        this.flawlessWaves = this.state.flawlessWaves
         this.spawnRemaining = Math.max(0, Math.floor(source.gameState?.spawnLeft ?? 0))
         this.spawnCooldown = Math.max(0, Math.floor(source.gameState?.spawnTimer ?? 0))
         this.ambientCooldown = 900 + (source.seed % 4501)
@@ -279,8 +287,8 @@ export class PathwardenWorld {
             maxLives: 20,
             aether: this.state.aether,
             score: this.state.score,
-            streak: 0,
-            flawlessWaves: 0,
+            streak: this.streak,
+            flawlessWaves: this.flawlessWaves,
             spawnLeft: this.spawnRemaining,
             spawnTotal: this.spawnRemaining,
             spawnTimer: this.spawnCooldown,
@@ -402,6 +410,7 @@ export class PathwardenWorld {
             if (this.state.phase !== 'planning') return false
             this.state.phase = 'wave'
             this.state.wave = Math.min(12, this.state.wave + 1)
+            this.waveStartingLives = this.state.lives
             this.spawnRemaining = 7 + this.state.wave * 3 + Math.max(0, this.state.wave - 1)
             this.spawnCooldown = 0
             return true
@@ -552,6 +561,8 @@ export class PathwardenWorld {
             if (progress >= 1) {
                 this.removeEntity(enemy.id)
                 this.state.lives = Math.max(0, this.state.lives - 1)
+                this.streak = 0
+                this.state.streak = 0
                 if (this.state.lives === 0) {
                     this.state.phase = 'defeat'
                     this.spawnRemaining = 0
@@ -566,6 +577,12 @@ export class PathwardenWorld {
         this.simulateProjectiles()
         this.simulateEffects()
         if (this.spawnRemaining === 0 && !this.getEntities().some(entity => entity.data.type === 2)) {
+            if (this.state.lives >= this.waveStartingLives) {
+                this.flawlessWaves++
+                this.streak++
+                this.state.flawlessWaves = this.flawlessWaves
+                this.state.streak = this.streak
+            }
             this.state.aether += 20 + this.state.wave * 4
             this.state.score += 100 * this.state.wave
             if (this.state.wave % 4 === 0) {

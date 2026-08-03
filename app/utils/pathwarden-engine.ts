@@ -1203,6 +1203,8 @@ export class PathwardenEngine {
     lives: number
     aether: number
     score: number
+    streak?: number
+    flawlessWaves?: number
     paused: boolean
     claimedRoomIds?: string[]
     revealedCells?: Array<{ col: number, row: number }>
@@ -1213,6 +1215,8 @@ export class PathwardenEngine {
     this.lives = Math.max(0, authoritative.lives)
     this.aether = Math.max(0, authoritative.aether)
     this.score = Math.max(0, authoritative.score)
+    this.streak = Math.max(0, authoritative.streak ?? this.streak)
+    this.flawlessWaves = Math.max(0, authoritative.flawlessWaves ?? this.flawlessWaves)
     this.paused = authoritative.paused
     if (authoritative.claimedRoomIds && authoritative.revealedCells) {
       this.applyAuthoritativeMapState(authoritative.claimedRoomIds, authoritative.revealedCells)

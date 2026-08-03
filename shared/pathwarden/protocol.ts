@@ -41,6 +41,8 @@ export interface PathwardenWorldSnapshot {
     lives: number
     aether: number
     score: number
+    streak: number
+    flawlessWaves: number
     relicPower: number
     paused: boolean
     entityCount: number
@@ -376,6 +378,8 @@ export function encodeWorldSnapshot(snapshot: PathwardenWorldSnapshot, header: P
     payload.u16(snapshot.lives)
     payload.u32(Math.max(0, Math.round(snapshot.aether * 100)))
     payload.u32(snapshot.score)
+    payload.u16(snapshot.streak)
+    payload.u16(snapshot.flawlessWaves)
     payload.u16(Math.max(0, Math.round(snapshot.relicPower * 100)))
     payload.bool(snapshot.paused)
     payload.varUint(snapshot.entityCount)
@@ -515,6 +519,8 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
             lives: payloadReader.u16(),
             aether: payloadReader.u32() / 100,
             score: payloadReader.u32(),
+            streak: payloadReader.u16(),
+            flawlessWaves: payloadReader.u16(),
             relicPower: payloadReader.u16() / 100,
             paused: payloadReader.bool(),
             entityCount: payloadReader.varUint(),
