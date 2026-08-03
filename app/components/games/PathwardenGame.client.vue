@@ -729,6 +729,7 @@ function previousIntroStory() {
 async function skipIntroStory() {
   engine?.skipIntro()
   await runMapLoader()
+  await ensureRunStarted()
 }
 
 function nextHint() {
