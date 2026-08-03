@@ -3881,6 +3881,7 @@ export class PathwardenEngine {
 
   private extendPath(choice: PathChoice) {
     if (this.phase !== 'path' || !this.pathChoices.includes(choice)) return
+    this.callbacks.onCommand?.({ type: 'claim-path', choice: this.pathChoices.indexOf(choice) })
     this.persistCurrentPathLinks()
     const links = choice.links ?? choice.cells.map((cell, index) => ({
       from: index === 0 ? choice.source : choice.cells[index - 1]!,

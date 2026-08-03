@@ -49,6 +49,7 @@ export class PathwardenWorld {
     private readonly commands: QueuedCommand[] = []
     private readonly entities = new Map<number, PathwardenEntity>()
     private readonly mapPlan: PathwardenMapPlan
+    private readonly claimedRooms = new Set<string>()
     private readonly revealed = new Set<string>()
     private readonly reservedRoads = new Set<string>()
     private readonly state: PathwardenWorldSnapshot
@@ -58,7 +59,7 @@ export class PathwardenWorld {
     private selectedTower = 'bolt'
     private spawnRemaining = 0
     private spawnCooldown = 0
-    private choiceKind: 'checkpoint' | 'relic' | null = null
+    private choiceKind: 'checkpoint' | 'relic' | 'path' | null = null
     private choices: number[] = []
     private batching = false
     private dirty = false
@@ -67,6 +68,8 @@ export class PathwardenWorld {
     constructor(source: PathwardenWorldSource) {
         this.mapPlan = source.mapPlan
         const claimed = new Set(source.gameState?.claimedRoomIds ?? [])
+        this.claimedRooms.add(this.mapPlan.castleRoomId)
+        for (const roomId of claimed) this.claimedRooms.add(roomId)
         const castle = this.mapPlan.rooms.find(room => room.id === this.mapPlan.castleRoomId)
         for (const room of this.mapPlan.rooms) {
             if (room.id === this.mapPlan.castleRoomId || claimed.has(room.id)) {
@@ -133,6 +136,7 @@ export class PathwardenWorld {
         if (command.type === 'move-tower') return this.validateMove(command)
         if (command.type === 'set-targeting') return this.validateTargeting(command)
         if (command.type === 'continue-checkpoint') return this.state.phase === 'checkpoint'
+        if (command.type === 'claim-path') return this.state.phase === 'path' && this.choiceKind === 'path' && this.choices.includes(command.choice)
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
         if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && this.choices.includes(command.choice)
@@ -208,8 +212,8 @@ export class PathwardenWorld {
             spawnTimer: this.spawnCooldown,
             combatRandomState: this.state.seed,
             path: this.mapPlan.rooms.find(room => room.id === this.mapPlan.castleRoomId)?.roadCells ?? [],
-            claimedRoomIds: [this.mapPlan.castleRoomId],
-            activeRoomIds: [this.mapPlan.castleRoomId],
+            claimedRoomIds: [...this.claimedRooms],
+            activeRoomIds: [...this.claimedRooms],
             selectedTower: this.selectedTower,
             towerPurchases: {},
             relicRanks: {},
@@ -349,9 +353,20 @@ export class PathwardenWorld {
                 this.state.phase = 'victory'
                 return true
             }
-            this.state.phase = 'upgrade'
-            this.choiceKind = 'relic'
-            this.choices = [0, 1, 2]
+            this.openNextChoice()
+            return true
+        }
+        if (command.type === 'claim-path') {
+            const roomId = this.pathChoices()[command.choice]
+            const room = this.mapPlan.rooms.find(candidate => candidate.id === roomId)
+            if (!room) return false
+            this.claimedRooms.add(room.id)
+            for (const cell of room.roadCells) {
+                this.reservedRoads.add(this.cellKey(cell.col, cell.row))
+                this.revealed.add(this.cellKey(cell.col, cell.row))
+            }
+            for (const cell of room.revealCells) this.revealed.add(this.cellKey(cell.col, cell.row))
+            this.openRelicChoice()
             return true
         }
         if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
@@ -416,9 +431,7 @@ export class PathwardenWorld {
                 this.choiceKind = 'checkpoint'
                 this.choices = [0, 1, 2]
             } else {
-                this.state.phase = 'upgrade'
-                this.choiceKind = 'relic'
-                this.choices = [0, 1, 2]
+                this.openNextChoice()
             }
         }
     }
@@ -488,6 +501,28 @@ export class PathwardenWorld {
 
     private towerDamage(type: string) {
         return PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25
+    }
+
+    private pathChoices() {
+        const next = this.mapPlan.connections
+            .filter(connection => this.claimedRooms.has(connection.fromRoomId) && !this.claimedRooms.has(connection.toRoomId))
+            .map(connection => connection.toRoomId)
+        return [...new Set(next)].slice(0, 3)
+    }
+
+    private openRelicChoice() {
+        this.state.phase = 'upgrade'
+        this.choiceKind = 'relic'
+        this.choices = [0, 1, 2]
+    }
+
+    private openNextChoice() {
+        const paths = this.pathChoices()
+        if (paths.length) {
+            this.state.phase = 'path'
+            this.choiceKind = 'path'
+            this.choices = paths.map((_, index) => index)
+        } else this.openRelicChoice()
     }
 
     private cellKey(col: number, row: number) {

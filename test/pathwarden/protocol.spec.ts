@@ -115,6 +115,10 @@ describe('Pathwarden binary gameplay protocol', () => {
         expect(offer.payload).toEqual({ kind: 'checkpoint', choices: [0, 1, 2] })
         const command = decodePacket(encodeInputCommand(4, { type: 'checkpoint-choice', choice: 2 }))
         expect(command.payload).toMatchObject({ command: { type: 'checkpoint-choice', choice: 2 } })
+        const pathOffer = decodePacket(encodeChoiceOffer('path', [0, 1, 2]))
+        expect(pathOffer.payload).toEqual({ kind: 'path', choices: [0, 1, 2] })
+        const pathCommand = decodePacket(encodeInputCommand(5, { type: 'claim-path', choice: 1 }))
+        expect(pathCommand.payload).toMatchObject({ command: { type: 'claim-path', choice: 1 } })
     })
 
     it('round-trips building commands with compact numeric payloads', () => {
