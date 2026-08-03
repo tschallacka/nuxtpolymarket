@@ -775,13 +775,9 @@ async function abandonRun(currency: 'gems' | 'coins') {
 }
 
 function chooseUpgrade(upgrade: PathwardenRelic) {
-  if (activeRunId.value) {
-    realtime.send({ type: 'relic-choice', choice: upgradeChoices.value.indexOf(upgrade), offerRevision: realtime.choiceOffer.value?.offerRevision })
-    upgradeChoices.value = []
-    return
-  }
+  if (!activeRunId.value) return
+  realtime.send({ type: 'relic-choice', choice: upgradeChoices.value.indexOf(upgrade), offerRevision: realtime.choiceOffer.value?.offerRevision })
   upgradeChoices.value = []
-  engine?.chooseUpgrade(upgrade)
 }
 
 function relicIconStyle(relic: { iconIndex: number }) {
