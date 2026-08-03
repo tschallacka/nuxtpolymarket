@@ -137,6 +137,9 @@ export function usePathwardenRealtime() {
         socket.onopen = () => {
             status.value = 'connected'
             socket?.send(encodeHello())
+            for (const [inputSequence, command] of pending) {
+                socket?.send(encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0))
+            }
         }
         socket.onmessage = handlePacket
         socket.onerror = () => {

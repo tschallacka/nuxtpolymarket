@@ -1215,6 +1215,29 @@ export class PathwardenEngine {
     this.emitState()
   }
 
+  applyAuthoritativeMapPlan(mapPlan: PathwardenMapPlan) {
+    if (this.destroyed || !mapPlan?.rooms?.length) return
+    this.mapPlan = mapPlan
+    this.mapSeed = mapPlan.seed
+    this.mapRandomState = mapPlan.seed
+    this.realm = clamp(Math.floor(mapPlan.realm), 1, 5)
+    this.elevations = this.createElevations()
+    this.path = this.castlePath()
+    this.initialPath = this.path.map(point => ({ ...point }))
+    this.branchRoads = []
+    this.branchLinks = []
+    this.revealed.clear()
+    this.pathChoices = []
+    this.plannedSections = []
+    this.claimedSections.clear()
+    this.precalculateExpansionPlan(EXPANSION_DEPTH)
+    this.activatePlannedChoices(this.mapPlan.castleRoomId)
+    this.revealAround(this.initialRevealCells())
+    this.seedCastleCrossroads()
+    this.refreshChoiceAnchors()
+    this.render()
+  }
+
   applyAuthoritativeEntities(entities: PathwardenEntityState[]) {
     if (this.destroyed) return
     this.serverAuthoritative = true

@@ -1146,6 +1146,10 @@ watch(realtime.snapshot, authoritative => {
   if ((authoritative.phase === 'defeat' || authoritative.phase === 'victory') && runActive.value) void settleRun(authoritative.phase)
 })
 
+watch(realtime.mapPlan, mapPlan => {
+  if (mapPlan) engine?.applyAuthoritativeMapPlan(mapPlan)
+})
+
 watch(realtime.entities, entities => {
   engine?.applyAuthoritativeEntities(entities)
 })

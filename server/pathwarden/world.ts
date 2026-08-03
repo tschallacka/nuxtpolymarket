@@ -60,6 +60,8 @@ export class PathwardenWorld {
     private spawnCooldown = 0
     private choiceKind: 'checkpoint' | 'relic' | null = null
     private choices: number[] = []
+    private batching = false
+    private dirty = false
     private onChange: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
@@ -154,7 +156,7 @@ export class PathwardenWorld {
         }
         this.entities.set(entity.id, entity)
         this.state.entityCount = this.entities.size
-        this.onChange(this.getSnapshot(), this.getEntities())
+        this.notifyChange()
         return entity.id
     }
 
@@ -163,7 +165,7 @@ export class PathwardenWorld {
         if (!entity) return false
         Object.assign(entity, patch)
         if (patch.data) entity.data = { ...patch.data, components: patch.data.components ? { ...patch.data.components } : undefined }
-        this.onChange(this.getSnapshot(), this.getEntities())
+        this.notifyChange()
         return true
     }
 
@@ -171,7 +173,7 @@ export class PathwardenWorld {
         const removed = this.entities.delete(id)
         if (removed) {
             this.state.entityCount = this.entities.size
-            this.onChange(this.getSnapshot(), this.getEntities())
+            this.notifyChange()
         }
         return removed
     }
@@ -256,6 +258,7 @@ export class PathwardenWorld {
 
     private advance() {
         this.state.tick += 1
+        this.batching = true
         const commands = this.commands.splice(0)
         let changed = commands.length > 0
         for (const queued of commands) {
@@ -264,7 +267,18 @@ export class PathwardenWorld {
             changed = this.apply(queued.command) || changed
         }
         this.simulateWave()
-        if (changed || this.state.tick % 10 === 0) this.onChange(this.getSnapshot(), this.getEntities())
+        this.batching = false
+        if (changed || this.dirty || this.state.tick % 10 === 0) this.notifyChange()
+        else this.dirty = false
+    }
+
+    private notifyChange() {
+        if (this.batching) {
+            this.dirty = true
+            return
+        }
+        this.dirty = false
+        this.onChange(this.getSnapshot(), this.getEntities())
     }
 
     private apply(command: PathwardenInputCommand) {
