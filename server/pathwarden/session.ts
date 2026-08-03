@@ -6,6 +6,13 @@ import { auth } from '#server/utils/auth'
 import { recordPathwardenAmbientStory } from '#server/utils/pathwarden'
 import { PathwardenWorld } from '#server/pathwarden/world'
 import {
+    pathwardenMetricCommand,
+    pathwardenMetricConnection,
+    pathwardenMetricDisconnection,
+    pathwardenMetricPacket,
+    pathwardenMetricTick
+} from '#server/pathwarden/metrics'
+import {
     decodePacket,
     encodeCommandAck,
     encodeEntitySnapshot,
@@ -41,6 +48,7 @@ export function hasPathwardenSessionForUser(userId: string) {
 function send(session: ActiveSession, payload: ArrayBuffer) {
     try {
         session.peer.send(payload)
+        pathwardenMetricPacket('out', payload.byteLength)
     } catch {
         sessions.delete(session.runId)
     }
@@ -113,6 +121,7 @@ export async function flushPathwardenSessionForUser(userId: string) {
 
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
     if (inputSequence <= session.world.lastAppliedInput) {
+        pathwardenMetricCommand(true)
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
         return
     }
@@ -122,19 +131,23 @@ function handleCommand(session: ActiveSession, command: PathwardenInputCommand, 
         session.commandsInWindow = 0
     }
     if (session.commandsInWindow >= MAX_COMMANDS_PER_SECOND) {
+        pathwardenMetricCommand(false)
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, 'Pathwarden command rate limit exceeded'))
         return
     }
     session.commandsInWindow++
     if (!session.world.canApply(command)) {
+        pathwardenMetricCommand(false)
         const reason = 'Command is not valid in the current Pathwarden state'
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, reason))
         return
     }
     if (!session.world.enqueue(inputSequence, command)) {
+        pathwardenMetricCommand(false)
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, 'Pathwarden command queue is full'))
         return
     }
+    pathwardenMetricCommand(true)
     send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
 }
 
@@ -142,6 +155,7 @@ export async function openPathwardenSession(peer: Peer) {
     const session = await createSession(peer)
     if (!session) return
     const previous = sessions.get(session.runId)
+    pathwardenMetricConnection(Boolean(previous))
     previous?.peer.close(4009, 'Replaced by a newer Pathwarden session')
     previous?.world.stop()
     session.world.setChangeHandler((snapshot, entities) => {
@@ -164,6 +178,7 @@ export async function openPathwardenSession(peer: Peer) {
     session.world.setAmbientStoryHandler(storyId => {
         void db.transaction(tx => recordPathwardenAmbientStory(tx, session.userId, storyId)).catch(() => {})
     })
+    session.world.setTickMetricsHandler(pathwardenMetricTick)
     sessions.set(session.runId, session)
     send(session, encodeHelloAck({ sequence: session.nextPacketSequence++ }))
     for (const packet of encodeMapSnapshotChunks(session.mapPlan, session.nextPacketSequence)) {
@@ -192,6 +207,7 @@ export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): Ar
     if (!session) return
     try {
         const packet = decodePacket(message.arrayBuffer())
+        pathwardenMetricPacket('in', message.arrayBuffer().byteLength)
         if (packet.header.kind !== PathwardenPacketKind.InputCommand) return
         const payload = packet.payload as { inputSequence: number, command: PathwardenInputCommand } | null
         if (!payload) throw new Error('Invalid Pathwarden input')
@@ -205,6 +221,7 @@ export function closePathwardenSession(peer: Peer) {
     for (const [runId, session] of sessions) {
         if (session.peer === peer) {
             session.world.stop()
+            pathwardenMetricDisconnection()
             void session.persistPromise
             sessions.delete(runId)
         }

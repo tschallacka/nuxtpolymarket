@@ -73,6 +73,7 @@ export class PathwardenWorld {
     private dirty = false
     private onChange: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void = () => {}
     private onAmbientStoryComplete: (storyId: number) => void = () => {}
+    private onTickMetrics: (durationMs: number) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
         this.mapPlan = source.mapPlan
@@ -176,6 +177,10 @@ export class PathwardenWorld {
 
     setAmbientStoryHandler(handler: (storyId: number) => void) {
         this.onAmbientStoryComplete = handler
+    }
+
+    setTickMetricsHandler(handler: (durationMs: number) => void) {
+        this.onTickMetrics = handler
     }
 
     start() {
@@ -376,6 +381,7 @@ export class PathwardenWorld {
     }
 
     private advance() {
+        const startedAt = Date.now()
         this.state.tick += 1
         this.batching = true
         const commands = this.commands.splice(0)
@@ -390,6 +396,7 @@ export class PathwardenWorld {
         this.batching = false
         if (changed || this.dirty || this.state.tick % 10 === 0) this.notifyChange()
         else this.dirty = false
+        this.onTickMetrics(Math.max(0, Date.now() - startedAt))
     }
 
     private notifyChange() {
