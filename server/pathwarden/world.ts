@@ -1,4 +1,4 @@
-import type { PathwardenGameState, PathwardenMapPlan } from '#shared/types/pathwarden-save'
+import type { PathwardenGameState, PathwardenMapPlan, PathwardenSavedRelic } from '#shared/types/pathwarden-save'
 import { PATHWARDEN_DEFENSE_BLUEPRINTS } from '#shared/utils/gamelogic/pathwarden'
 import type {
     PathwardenInputCommand,
@@ -61,6 +61,7 @@ export class PathwardenWorld {
     private spawnCooldown = 0
     private ambientCooldown = 80
     private nextAmbientStoryId = 1
+    private nextRelicInstanceId = 1
     private choiceKind: 'checkpoint' | 'relic' | 'path' | null = null
     private choices: number[] = []
     private batching = false
@@ -109,6 +110,7 @@ export class PathwardenWorld {
         for (const tower of source.gameState?.towers ?? []) {
             this.spawnEntity({ type: 1, components: { towerType: tower.type, col: tower.col, row: tower.row, invested: tower.invested } }, tower.col, tower.row)
         }
+        for (const relic of source.gameState?.relicInventory ?? []) this.spawnRelic(relic)
     }
 
     setChangeHandler(handler: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void) {
@@ -145,6 +147,7 @@ export class PathwardenWorld {
         if (command.type === 'set-targeting') return this.validateTargeting(command)
         if (command.type === 'continue-checkpoint') return this.state.phase === 'checkpoint'
         if (command.type === 'claim-path') return this.state.phase === 'path' && this.choiceKind === 'path' && this.choices.includes(command.choice)
+        if (command.type === 'sell-relic') return this.state.phase !== 'wave' && this.state.phase !== 'checkpoint' && this.entities.get(command.instanceId)?.data.type === 5
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
         if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && this.choices.includes(command.choice)
@@ -228,7 +231,7 @@ export class PathwardenWorld {
             globalRelics: {
                 server: { level: Math.round(this.state.relicPower * 10), power: this.state.relicPower }
             },
-            relicInventory: [],
+            relicInventory: entities.filter(entity => entity.data.type === 5).map(entity => this.relicFromEntity(entity)),
             ashPiles: [],
             interest: 0,
             canSellRelics: false,
@@ -268,7 +271,7 @@ export class PathwardenWorld {
             projectiles: [],
             towerId: this.nextEntityId,
             enemyId: this.nextEntityId,
-            relicInstanceId: 1
+            relicInstanceId: this.nextRelicInstanceId
         }
     }
 
@@ -380,11 +383,30 @@ export class PathwardenWorld {
             this.openRelicChoice()
             return true
         }
+        if (command.type === 'sell-relic') {
+            const relic = this.entities.get(command.instanceId)!
+            this.state.aether += Number(relic.data.components?.sellValue ?? 0)
+            this.removeEntity(relic.id)
+            return true
+        }
         if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
             if (!this.canApply(command)) return false
             this.state.aether += command.choice * 10
             if (command.type === 'relic-choice') {
                 this.state.relicPower = Math.min(5, this.state.relicPower + (command.choice + 1) * 0.1)
+                this.spawnRelic({
+                    instanceId: this.nextRelicInstanceId++,
+                    id: `server-relic-${this.state.tick}-${command.choice}`,
+                    family: ['fire', 'frost', 'bounty'][command.choice] ?? 'fire',
+                    rarity: 'common',
+                    name: ['Flame Arrows', 'Rime Arrows', 'Verdant Bounty'][command.choice] ?? 'Server Relic',
+                    description: 'A server-authoritative Pathwarden relic.',
+                    towerSpecific: command.choice < 2,
+                    iconIndex: command.choice,
+                    power: (command.choice + 1) * 0.5,
+                    sellValue: 15 + command.choice * 5,
+                    color: '#c4b5fd'
+                })
             }
             this.choiceKind = null
             this.choices = []
@@ -542,6 +564,40 @@ export class PathwardenWorld {
 
     private towerDamage(type: string) {
         return (PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25) * (1 + this.state.relicPower)
+    }
+
+    private spawnRelic(relic: PathwardenSavedRelic) {
+        this.nextRelicInstanceId = Math.max(this.nextRelicInstanceId, relic.instanceId + 1)
+        this.spawnEntity({ type: 5, components: {
+            instanceId: relic.instanceId,
+            relicId: relic.id,
+            family: relic.family,
+            rarity: relic.rarity,
+            name: relic.name,
+            description: relic.description,
+            towerSpecific: relic.towerSpecific,
+            iconIndex: relic.iconIndex,
+            power: relic.power,
+            sellValue: relic.sellValue,
+            color: relic.color ?? '#c4b5fd'
+        } }, 0, 0)
+    }
+
+    private relicFromEntity(entity: PathwardenEntity): PathwardenSavedRelic {
+        const components = entity.data.components ?? {}
+        return {
+            instanceId: Number(components.instanceId ?? entity.id),
+            id: String(components.relicId ?? `server-relic-${entity.id}`),
+            family: String(components.family ?? 'fire'),
+            rarity: String(components.rarity ?? 'common'),
+            name: String(components.name ?? 'Server Relic'),
+            description: String(components.description ?? 'A server-authoritative Pathwarden relic.'),
+            towerSpecific: components.towerSpecific === true,
+            iconIndex: Number(components.iconIndex ?? 0),
+            power: Number(components.power ?? 0.5),
+            sellValue: Number(components.sellValue ?? 15),
+            color: String(components.color ?? '#c4b5fd')
+        }
     }
 
     private pathChoices() {

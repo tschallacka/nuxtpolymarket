@@ -513,6 +513,7 @@ function chooseInventoryDefense(type: PathwardenTowerType) {
 }
 
 function sellRelic(instanceId: number) {
+  if (activeRunId.value) realtime.send({ type: 'sell-relic', instanceId })
   engine?.sellRelic(instanceId)
 }
 

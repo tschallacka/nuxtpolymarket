@@ -1336,6 +1336,26 @@ export class PathwardenEngine {
         countsForProgress: false
       }
     })
+    this.relicInventory = entities.filter(entity => entity.type === 5).map(entity => {
+      const components = entity.components ?? {}
+      const template = PATHWARDEN_RELICS.find(relic => relic.id === String(components.relicId ?? '')) ?? PATHWARDEN_RELICS[0]!
+      return {
+        ...template,
+        id: String(components.relicId ?? template.id),
+        family: String(components.family ?? template.family) as PathwardenRelicFamily,
+        name: String(components.name ?? template.name),
+        description: String(components.description ?? template.description),
+        towerSpecific: components.towerSpecific === true,
+        iconIndex: Number(components.iconIndex ?? template.iconIndex),
+        power: Number(components.power ?? template.power),
+        sellValue: Number(components.sellValue ?? template.sellValue),
+        color: String(components.color ?? template.color),
+        instanceId: Number(components.instanceId ?? entity.id),
+        variationSeed: Number(components.instanceId ?? entity.id),
+        damageFactor: 1,
+        baseEffects: emptyRelicEffects()
+      }
+    })
     this.emitState()
   }
 
