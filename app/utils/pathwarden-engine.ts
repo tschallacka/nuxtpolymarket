@@ -1563,7 +1563,7 @@ export class PathwardenEngine {
   }
 
   debugOpenFrontier() {
-    if (!import.meta.dev || this.phase !== 'planning') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase !== 'planning') return
     this.phase = 'path'
     this.message = 'Development frontier inspection.'
     this.focusFrontierChoices()
@@ -1571,7 +1571,7 @@ export class PathwardenEngine {
   }
 
   debugSpawnCrew() {
-    if (!import.meta.dev || !this.towers.length) return
+    if (!import.meta.dev || this.serverAuthoritative || !this.towers.length) return
     this.ambientActors = this.ambientActors.filter(actor => actor.kind !== 'crew')
     this.ambientActors.push({
       id: this.ambientId++,
@@ -1586,7 +1586,7 @@ export class PathwardenEngine {
   }
 
   debugPopulateVillage() {
-    if (!import.meta.dev || this.phase !== 'planning') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase !== 'planning') return
     const kinds: AmbientKind[] = ['market', 'picnic', 'hunt', 'musician', 'children', 'shepherd', 'patrol', 'peddler', 'crew', 'cat', 'bird']
     this.ambientActors = kinds.map((kind, index) => ({
       id: this.ambientId++,
@@ -1603,7 +1603,7 @@ export class PathwardenEngine {
   }
 
   debugPrepareShowcase() {
-    if (!import.meta.dev) return
+    if (!import.meta.dev || this.serverAuthoritative) return
     this.debugRevealFullMap()
     this.aether = Math.max(this.aether, 5_000)
     this.debugBuildLoadout()
@@ -1615,7 +1615,7 @@ export class PathwardenEngine {
   }
 
   debugPreviewAmbient(kind: 'market' | 'hunt', progress: number, success = true) {
-    if (!import.meta.dev || this.phase !== 'planning') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase !== 'planning') return
     const duration = kind === 'market' ? 150 : 125
     this.ambientActors = [{
       id: this.ambientId++,
@@ -1632,7 +1632,7 @@ export class PathwardenEngine {
   }
 
   debugTriggerAmbient(storyId = 0) {
-    if (!import.meta.dev || this.phase === 'wave') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase === 'wave') return
     const normalized = storyId > 0
       ? clamp(Math.floor(storyId), 1, AMBIENT_STORY_COUNT)
       : Math.floor(Math.random() * AMBIENT_STORY_COUNT) + 1
@@ -1667,7 +1667,7 @@ export class PathwardenEngine {
   }
 
   debugPreviewAmbientStory(storyId: number, progress: number) {
-    if (!import.meta.dev || this.phase === 'wave') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase === 'wave') return
     const normalized = clamp(Math.floor(storyId), 1, AMBIENT_STORY_COUNT)
     const family = AMBIENT_FAMILIES[Math.floor((normalized - 1) / 10)]!
     const duration = this.ambientDuration(family.kind, normalized)
@@ -1693,7 +1693,7 @@ export class PathwardenEngine {
   }
 
   debugClaimFrontier(index = 0) {
-    if (!import.meta.dev || (this.phase !== 'planning' && this.phase !== 'path')) return
+    if (!import.meta.dev || this.serverAuthoritative || (this.phase !== 'planning' && this.phase !== 'path')) return
     const choice = this.pathChoices[index]
     if (!choice) return
     this.phase = 'path'
@@ -1701,7 +1701,7 @@ export class PathwardenEngine {
   }
 
   debugRevealFullMap() {
-    if (!import.meta.dev || this.phase === 'wave') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase === 'wave') return
     this.persistCurrentPathLinks()
     const orderedSections = [...this.plannedSections].sort((left, right) => left.depth - right.depth)
     for (const choice of orderedSections) {
@@ -1729,7 +1729,7 @@ export class PathwardenEngine {
   }
 
   debugToggleSandbox() {
-    if (!import.meta.dev) return
+    if (!import.meta.dev || this.serverAuthoritative) return
     this.debugSandbox = !this.debugSandbox
     if (this.debugSandbox) {
       this.aether = 1_000_000_000
@@ -1917,21 +1917,21 @@ export class PathwardenEngine {
   }
 
   debugGrantAether(amount = 1000) {
-    if (!import.meta.dev) return
+    if (!import.meta.dev || this.serverAuthoritative) return
     this.aether += clamp(Math.floor(amount), 0, 10000)
     this.message = 'Development treasury opened.'
     this.emitState()
   }
 
   debugSetAether(amount = 0) {
-    if (!import.meta.dev) return
+    if (!import.meta.dev || this.serverAuthoritative) return
     this.aether = clamp(Math.floor(amount), 0, 10000)
     this.message = `Development Aether set to ${this.aether}.`
     this.emitState()
   }
 
   debugBuildLoadout() {
-    if (!import.meta.dev || this.phase !== 'planning') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase !== 'planning') return
     this.aether = Math.max(this.aether, 5_000)
     const types: PathwardenTowerType[] = ['bolt', 'mortar', 'frost', 'ember', 'storm', 'radiant']
     for (const type of types) {
@@ -1971,7 +1971,7 @@ export class PathwardenEngine {
   }
 
   debugSpendEconomically() {
-    if (!import.meta.dev || this.phase !== 'planning') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase !== 'planning') return
     const types: PathwardenTowerType[] = ['bolt', 'frost', 'mortar']
     let attempts = 0
     while (this.towers.length < 7 && attempts++ < 12) {
@@ -2020,19 +2020,19 @@ export class PathwardenEngine {
   }
 
   debugSetTimeScale(scale = 1) {
-    if (!import.meta.dev) return
+    if (!import.meta.dev || this.serverAuthoritative) return
     this.debugTimeScale = clamp(scale, 1, 10)
   }
 
   debugPreviewLateWave() {
-    if (!import.meta.dev || this.phase !== 'planning') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase !== 'planning') return
     this.wave = 7
     this.message = 'Development preview prepared for the second guardian wave.'
     this.emitState()
   }
 
   debugOfferRelics() {
-    if (!import.meta.dev || this.phase === 'wave') return
+    if (!import.meta.dev || this.serverAuthoritative || this.phase === 'wave') return
     this.phase = 'upgrade'
     this.callbacks.onUpgrade([
       this.materializeRelic(PATHWARDEN_RELICS.find(relic => relic.id === 'fire-common')!, 101, 1),
@@ -2044,13 +2044,13 @@ export class PathwardenEngine {
   }
 
   debugSetArcanistLevel(level: number) {
-    if (!import.meta.dev) return
+    if (!import.meta.dev || this.serverAuthoritative) return
     this.arcanistLevel = clamp(Math.floor(level), 0, 20)
     this.emitState()
   }
 
   debugPrepareRelicSwapScenario(scenario: PathwardenRelicSwapDebugScenario) {
-    if (!import.meta.dev) return null
+    if (!import.meta.dev || this.serverAuthoritative) return null
     this.phase = 'planning'
     this.revealed.clear()
     this.revealAround(this.initialPath.slice(0, 4))
@@ -2103,7 +2103,7 @@ export class PathwardenEngine {
   }
 
   debugOpenRelicSwapWorkbench() {
-    if (!import.meta.dev || this.debugRelicSwapTowerId === null) return null
+    if (!import.meta.dev || this.serverAuthoritative || this.debugRelicSwapTowerId === null) return null
     const tower = this.towers.find(candidate => candidate.id === this.debugRelicSwapTowerId)
     const relic = this.relicInventory[0]
     if (!tower || !relic || !tower.relicFamily || (tower.relicId === relic.id && !this.debugForceRelicSwap)) return null
