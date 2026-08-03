@@ -11,6 +11,7 @@ import {
   type PathwardenTowerType
 } from '~/utils/pathwarden-engine'
 import type { PathwardenGameState, PathwardenMapPlan } from '#shared/types/pathwarden-save'
+import type { PathwardenInputCommand } from '#shared/pathwarden/protocol'
 import {
   PATHWARDEN_DEFENSE_BLUEPRINTS,
   type PathwardenDefenseArchetype,
@@ -1043,6 +1044,9 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
     },
     onGameOver: async (won) => {
       await settleRun(won ? 'victory' : 'defeat')
+    },
+    onCommand: (command: PathwardenInputCommand) => {
+      if (realtime.status.value === 'connected') realtime.send(command)
     }
   }, boostState.value
     ? pathwardenBoostEffects(boostState.value.levels, useSurge.value)

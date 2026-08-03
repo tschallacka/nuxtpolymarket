@@ -16,6 +16,7 @@ import type {
   PathwardenGameState,
   PathwardenMapPlan
 } from '#shared/types/pathwarden-save'
+import type { PathwardenInputCommand } from '#shared/pathwarden/protocol'
 
 const WIDTH = 1200
 const HEIGHT = 760
@@ -622,6 +623,7 @@ export interface PathwardenCallbacks {
   onAmbientStoryComplete?: (storyId: number) => void
   onOpenBuildingInventory?: () => void
   onOpenArcanistWorkbench?: (preview: PathwardenRelicSwapPreview) => void
+  onCommand?: (command: PathwardenInputCommand) => void
 }
 
 export interface PathwardenEngineRestore {
@@ -1219,6 +1221,7 @@ export class PathwardenEngine {
     this.placementMode = true
     this.hoverCell = this.placementPreviewCell()
     this.message = `${towerStats(type).name} selected · ${this.towerCost(type)} Aether`
+    this.callbacks.onCommand?.({ type: 'select-tower', tower: type })
     this.emitState()
   }
 
@@ -4337,6 +4340,7 @@ export class PathwardenEngine {
       this.burst(position, stats.color, 18, 160)
       this.shockwaves.push({ ...position, radius: 5, maxRadius: 52, life: 0.55, color: stats.color })
       this.message = `${stats.name} raised on height ${this.elevations[cell.row]![cell.col]}.`
+      this.callbacks.onCommand?.({ type: 'place-tower', col: cell.col, row: cell.row })
     }
     this.emitState()
   }
