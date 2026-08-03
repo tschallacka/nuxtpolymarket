@@ -848,6 +848,10 @@ function salvageBuilding() {
   engine?.salvageSelectedBuilding()
 }
 
+function upgradeBuilding() {
+  engine?.upgradeSelectedBuilding()
+}
+
 function closeBuildingProfile() {
   engine?.clearSelectedBuilding()
 }
@@ -1546,6 +1550,9 @@ watch(() => [snapshot.value.phase, snapshot.value.wave] as const, ([phase, wave]
           </div>
           <UButton class="mt-3" color="neutral" variant="outline" block icon="i-lucide-hammer" :disabled="snapshot.phase !== 'planning'" @click="salvageBuilding">
             Dismantle · +{{ snapshot.selectedBuilding.salvage }} Aether
+          </UButton>
+          <UButton class="mt-2" color="primary" variant="soft" block icon="i-lucide-arrow-up" :disabled="snapshot.phase !== 'planning' || snapshot.selectedBuilding.level >= 3" @click="upgradeBuilding">
+            Upgrade · {{ snapshot.selectedBuilding.level >= 3 ? 'MAX' : `${40 * snapshot.selectedBuilding.level} Aether` }}
           </UButton>
         </div>
         <div

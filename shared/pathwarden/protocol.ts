@@ -62,6 +62,11 @@ export type PathwardenInputCommand =
     | { type: 'start-wave' }
     | { type: 'select-tower', tower: string }
     | { type: 'place-tower', col: number, row: number }
+    | { type: 'upgrade-tower', id: number }
+    | { type: 'fuse-tower', sourceId: number, targetId: number }
+    | { type: 'salvage-tower', id: number }
+    | { type: 'move-tower', id: number, col: number, row: number }
+    | { type: 'set-targeting', id: number, targeting: 'first' | 'strong' | 'fast' }
     | { type: 'checkpoint-choice', choice: number }
     | { type: 'relic-choice', choice: number }
 
@@ -441,13 +446,27 @@ export function encodeInputCommand(inputSequence: number, command: PathwardenInp
     const payload = new ByteWriter()
     payload.varUint(inputSequence)
     payload.varUint(desiredTick)
-    const type = command.type === 'pause' ? 1 : command.type === 'start-wave' ? 2 : command.type === 'select-tower' ? 3 : command.type === 'place-tower' ? 4 : command.type === 'checkpoint-choice' ? 5 : 6
+    const type = command.type === 'pause' ? 1 : command.type === 'start-wave' ? 2 : command.type === 'select-tower' ? 3 : command.type === 'place-tower' ? 4 : command.type === 'upgrade-tower' ? 5 : command.type === 'fuse-tower' ? 6 : command.type === 'salvage-tower' ? 7 : command.type === 'move-tower' ? 8 : command.type === 'set-targeting' ? 9 : command.type === 'checkpoint-choice' ? 10 : 11
     payload.u8(type)
     if (command.type === 'pause') payload.bool(command.value)
     if (command.type === 'select-tower') payload.string(command.tower, 32)
     if (command.type === 'place-tower') {
         payload.u16(command.col)
         payload.u16(command.row)
+    }
+    if (command.type === 'upgrade-tower' || command.type === 'salvage-tower') payload.varUint(command.id)
+    if (command.type === 'fuse-tower') {
+        payload.varUint(command.sourceId)
+        payload.varUint(command.targetId)
+    }
+    if (command.type === 'move-tower') {
+        payload.varUint(command.id)
+        payload.u16(command.col)
+        payload.u16(command.row)
+    }
+    if (command.type === 'set-targeting') {
+        payload.varUint(command.id)
+        payload.u8(command.targeting === 'first' ? 1 : command.targeting === 'strong' ? 2 : 3)
     }
     if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') payload.varUint(command.choice)
     return encodePacket({ kind: PathwardenPacketKind.InputCommand, flags: 0, schema: 1, sequence: inputSequence, tick: desiredTick, acknowledgedInput: 0 }, payload.finish())
@@ -491,8 +510,18 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
                     : type === 4
                         ? { inputSequence, desiredTick, command: { type: 'place-tower', col: payloadReader.u16(), row: payloadReader.u16() } }
                         : type === 5
-                            ? { inputSequence, desiredTick, command: { type: 'checkpoint-choice', choice: payloadReader.varUint() } }
+                            ? { inputSequence, desiredTick, command: { type: 'upgrade-tower', id: payloadReader.varUint() } }
                             : type === 6
+                                ? { inputSequence, desiredTick, command: { type: 'fuse-tower', sourceId: payloadReader.varUint(), targetId: payloadReader.varUint() } }
+                                : type === 7
+                                    ? { inputSequence, desiredTick, command: { type: 'salvage-tower', id: payloadReader.varUint() } }
+                                    : type === 8
+                                        ? { inputSequence, desiredTick, command: { type: 'move-tower', id: payloadReader.varUint(), col: payloadReader.u16(), row: payloadReader.u16() } }
+                                        : type === 9
+                                            ? { inputSequence, desiredTick, command: { type: 'set-targeting', id: payloadReader.varUint(), targeting: (['first', 'strong', 'fast'] as const)[payloadReader.u8() - 1] ?? 'first' } }
+                                            : type === 10
+                            ? { inputSequence, desiredTick, command: { type: 'checkpoint-choice', choice: payloadReader.varUint() } }
+                            : type === 11
                                 ? { inputSequence, desiredTick, command: { type: 'relic-choice', choice: payloadReader.varUint() } }
                         : null
     } else if (header.kind === PathwardenPacketKind.CommandAck || header.kind === PathwardenPacketKind.CommandReject) {

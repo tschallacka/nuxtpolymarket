@@ -1970,6 +1970,7 @@ export class PathwardenEngine {
     if (this.phase !== 'planning') return
     const tower = this.towers.find(candidate => candidate.id === this.selectedTowerId)
     if (!tower) return
+    this.callbacks.onCommand?.({ type: 'set-targeting', id: tower.id, targeting })
     tower.targeting = targeting
     const label = targeting === 'first' ? 'the closest invader' : targeting === 'strong' ? 'the strongest invader' : 'the fastest invader'
     this.message = `${towerStats(tower.type).name} now targets ${label}.`
@@ -2451,12 +2452,27 @@ export class PathwardenEngine {
     const tower = this.towers.find(candidate => candidate.id === this.selectedTowerId)
     if (!tower) return
     const salvage = this.salvageValue(tower)
+    this.callbacks.onCommand?.({ type: 'salvage-tower', id: tower.id })
     this.towers.splice(this.towers.indexOf(tower), 1)
     this.aether += salvage
     this.selectedTowerId = null
     const position = this.gridToScreen(tower)
     this.burst(position, '#5eead4', 18, 140)
     this.message = `${towerStats(tower.type).name} dismantled · ${salvage} Aether recovered.`
+    this.emitState()
+  }
+
+  upgradeSelectedBuilding() {
+    if (this.phase !== 'planning') return
+    const tower = this.towers.find(candidate => candidate.id === this.selectedTowerId)
+    if (!tower || tower.level >= 3) return
+    const cost = 40 * tower.level
+    if (this.aether < cost) return
+    this.callbacks.onCommand?.({ type: 'upgrade-tower', id: tower.id })
+    tower.level += 1
+    tower.invested += cost
+    this.aether -= cost
+    this.message = `${towerStats(tower.type).name} upgraded to level ${tower.level}.`
     this.emitState()
   }
 
@@ -4316,6 +4332,7 @@ export class PathwardenEngine {
       } else if (target.level >= 3) {
         this.message = 'That defense has already reached its final form.'
       } else {
+        this.callbacks.onCommand?.({ type: 'fuse-tower', sourceId: tower.id, targetId: target.id })
         this.towers.splice(this.towers.indexOf(tower), 1)
         target.level++
         target.merges += tower.merges + 1
@@ -4339,6 +4356,7 @@ export class PathwardenEngine {
     }
     tower.col = targetCell.col
     tower.row = targetCell.row
+    this.callbacks.onCommand?.({ type: 'move-tower', id: tower.id, col: targetCell.col, row: targetCell.row })
     this.selectedTowerId = tower.id
     this.message = `${towerStats(tower.type).name} repositioned.`
     this.emitState()

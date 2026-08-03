@@ -127,6 +127,11 @@ export class PathwardenWorld {
 
     canApply(command: PathwardenInputCommand) {
         if (command.type === 'place-tower') return this.validatePlacement(command).allowed
+        if (command.type === 'upgrade-tower') return this.validateTower(command.id, 'upgrade')
+        if (command.type === 'fuse-tower') return this.validateFuse(command.sourceId, command.targetId)
+        if (command.type === 'salvage-tower') return this.validateTower(command.id, 'salvage')
+        if (command.type === 'move-tower') return this.validateMove(command)
+        if (command.type === 'set-targeting') return this.validateTargeting(command)
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
         if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && this.choices.includes(command.choice)
@@ -300,6 +305,44 @@ export class PathwardenWorld {
             this.selectedTower = command.tower
             return true
         }
+        if (command.type === 'upgrade-tower') {
+            const tower = this.entities.get(command.id)!
+            const components = tower.data.components ?? {}
+            const level = Number(components.level ?? 1)
+            const cost = 40 * level
+            this.state.aether -= cost
+            this.updateEntity(command.id, { data: { type: 1, components: { ...components, level: level + 1, invested: Number(components.invested ?? 0) + cost } } })
+            return true
+        }
+        if (command.type === 'fuse-tower') {
+            const source = this.entities.get(command.sourceId)!
+            const target = this.entities.get(command.targetId)!
+            const sourceComponents = source.data.components ?? {}
+            const targetComponents = target.data.components ?? {}
+            this.removeEntity(source.id)
+            this.updateEntity(target.id, { data: { type: 1, components: {
+                ...targetComponents,
+                level: Number(targetComponents.level ?? 1) + 1,
+                invested: Number(targetComponents.invested ?? 0) + Number(sourceComponents.invested ?? 0)
+            } } })
+            return true
+        }
+        if (command.type === 'salvage-tower') {
+            const tower = this.entities.get(command.id)!
+            const components = tower.data.components ?? {}
+            this.state.aether += Math.floor(Number(components.invested ?? 0) * 0.6)
+            this.removeEntity(command.id)
+            return true
+        }
+        if (command.type === 'move-tower') {
+            this.updateEntity(command.id, { x: command.col, y: command.row, data: { type: 1, components: { ...this.entities.get(command.id)!.data.components, col: command.col, row: command.row } } })
+            return true
+        }
+        if (command.type === 'set-targeting') {
+            const tower = this.entities.get(command.id)!
+            this.updateEntity(command.id, { data: { type: 1, components: { ...tower.data.components, targeting: command.targeting } } })
+            return true
+        }
         if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
             if (!this.canApply(command)) return false
             this.state.aether += command.choice * 10
@@ -424,5 +467,37 @@ export class PathwardenWorld {
         }
         if (this.state.aether < defense.aetherCost) return { allowed: false, reason: 'Not enough Aether.' }
         return { allowed: true, cost: defense.aetherCost }
+    }
+
+    private validateTower(id: number, action: 'upgrade' | 'salvage') {
+        if (this.state.phase !== 'planning') return false
+        const tower = this.entities.get(id)
+        if (!tower || tower.data.type !== 1) return false
+        if (action === 'upgrade') {
+            const level = Number(tower.data.components?.level ?? 1)
+            return level < 3 && this.state.aether >= 40 * level
+        }
+        return true
+    }
+
+    private validateFuse(sourceId: number, targetId: number) {
+        if (this.state.phase !== 'planning' || sourceId === targetId) return false
+        const source = this.entities.get(sourceId)
+        const target = this.entities.get(targetId)
+        if (!source || !target || source.data.type !== 1 || target.data.type !== 1) return false
+        const a = source.data.components ?? {}
+        const b = target.data.components ?? {}
+        return a.towerType === b.towerType && Number(a.level ?? 1) === Number(b.level ?? 1) && Number(b.level ?? 1) < 3
+    }
+
+    private validateMove(command: Extract<PathwardenInputCommand, { type: 'move-tower' }>) {
+        if (this.state.phase !== 'planning') return false
+        const tower = this.entities.get(command.id)
+        if (!tower || tower.data.type !== 1) return false
+        return this.validatePlacement({ type: 'place-tower', col: command.col, row: command.row }).allowed
+    }
+
+    private validateTargeting(command: Extract<PathwardenInputCommand, { type: 'set-targeting' }>) {
+        return this.state.phase === 'planning' && this.entities.get(command.id)?.data.type === 1
     }
 }

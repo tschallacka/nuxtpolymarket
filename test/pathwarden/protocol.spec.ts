@@ -116,4 +116,18 @@ describe('Pathwarden binary gameplay protocol', () => {
         const command = decodePacket(encodeInputCommand(4, { type: 'checkpoint-choice', choice: 2 }))
         expect(command.payload).toMatchObject({ command: { type: 'checkpoint-choice', choice: 2 } })
     })
+
+    it('round-trips building commands with compact numeric payloads', () => {
+        const commands = [
+            { type: 'upgrade-tower', id: 4 },
+            { type: 'fuse-tower', sourceId: 4, targetId: 9 },
+            { type: 'salvage-tower', id: 9 },
+            { type: 'move-tower', id: 9, col: 31, row: 12 },
+            { type: 'set-targeting', id: 9, targeting: 'strong' as const }
+        ]
+        for (const command of commands) {
+            const decoded = decodePacket(encodeInputCommand(3, command))
+            expect(decoded.payload).toMatchObject({ command })
+        }
+    })
 })
