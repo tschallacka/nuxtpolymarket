@@ -86,7 +86,10 @@ function persistWorld(session: ActiveSession, tick: number, terminal: boolean) {
 
 export async function flushPathwardenSessionForUser(userId: string) {
     const active = [...sessions.values()].find(session => session.userId === userId)
-    if (active?.persistPromise) await active.persistPromise
+    if (!active) return
+    active.lastPersistedTick = -1
+    persistWorld(active, active.world.getSnapshot().tick, true)
+    if (active.persistPromise) await active.persistPromise
 }
 
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {

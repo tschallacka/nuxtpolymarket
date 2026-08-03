@@ -684,6 +684,7 @@ async function ensureRunStarted() {
     })
     runActive.value = true
     activeRunId.value = response.run.id
+    engine?.setServerAuthoritative()
     realtime.connect(response.run.id)
     saveRevision = 0
     scheduleSave()
@@ -1056,6 +1057,7 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
     ? pathwardenBoostEffects(boostState.value.levels, useSurge.value)
     : undefined, selectedRealm.value, boostState.value?.equippedSkinId ?? 'warden-stone', restore, skipIntro.value)
   engine.setKeyboardPan(keyboardPan.value)
+  if (activeRunId.value) engine.setServerAuthoritative()
   if (startEngine) engine.start()
 }
 

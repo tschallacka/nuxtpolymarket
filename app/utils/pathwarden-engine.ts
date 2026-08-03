@@ -1238,6 +1238,10 @@ export class PathwardenEngine {
     this.render()
   }
 
+  setServerAuthoritative(enabled = true) {
+    this.serverAuthoritative = enabled
+  }
+
   applyAuthoritativeEntities(entities: PathwardenEntityState[]) {
     if (this.destroyed) return
     this.serverAuthoritative = true
