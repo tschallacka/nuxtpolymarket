@@ -945,17 +945,41 @@ export class PathwardenWorld {
     }
 
     private enemyRoute() {
-        const route: Array<{ col: number, row: number }> = []
-        const rooms = this.mapPlan.rooms
-            .filter(room => this.claimedRooms.has(room.id))
-            .sort((left, right) => left.depth - right.depth)
-        for (const room of rooms) {
-            for (const cell of room.roadCells) {
-                const previous = route[route.length - 1]
-                if (!previous || previous.col !== cell.col || previous.row !== cell.row) route.push({ col: cell.col, row: cell.row })
+        type Cell = { col: number, row: number }
+        const key = (cell: Cell) => `${cell.col}:${cell.row}`
+        const points = new Map<string, Cell>()
+        const edges = new Map<string, Set<string>>()
+        for (const link of this.mapPlan.roadLinks) {
+            if (!this.claimedRooms.has(link.roomId)) continue
+            const from = key(link.from)
+            const to = key(link.to)
+            points.set(from, { ...link.from })
+            points.set(to, { ...link.to })
+            if (!edges.has(from)) edges.set(from, new Set())
+            if (!edges.has(to)) edges.set(to, new Set())
+            edges.get(from)!.add(to)
+            edges.get(to)!.add(from)
+        }
+        const origin = this.mapPlan.rooms.find(room => room.id === this.mapPlan.castleRoomId)?.origin ?? { col: 80, row: 80 }
+        const originKey = key(origin)
+        if (!edges.has(originKey)) return [origin, { col: origin.col + 1, row: origin.row + 1 }]
+        const queue = [originKey]
+        const previous = new Map<string, string | null>([[originKey, null]])
+        for (let index = 0; index < queue.length; index++) {
+            const current = queue[index]!
+            for (const next of edges.get(current) ?? []) {
+                if (previous.has(next)) continue
+                previous.set(next, current)
+                queue.push(next)
             }
         }
-        return route.length > 1 ? route : [{ col: 80, row: 80 }, { col: 81, row: 81 }]
+        const terminals = queue.filter(cell => cell !== originKey && (edges.get(cell)?.size ?? 0) <= 1)
+        const target = terminals.sort((left, right) => right.localeCompare(left))[0] ?? queue.at(-1)
+        if (!target) return [origin, { col: origin.col + 1, row: origin.row + 1 }]
+        const route: Cell[] = []
+        for (let current: string | null = target; current; current = previous.get(current) ?? null) route.push(points.get(current)!)
+        route.reverse()
+        return route.length > 1 ? route : [origin, { col: origin.col + 1, row: origin.row + 1 }]
     }
 
     private routePosition(progress: number) {

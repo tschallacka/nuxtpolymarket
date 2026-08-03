@@ -220,6 +220,23 @@ describe('Pathwarden authoritative world', () => {
         expect(roadCells).toContainEqual({ col: enemy!.x, row: enemy!.y })
     })
 
+    it('moves enemies across adjacent authoritative road links', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-9a', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        world.enqueue(1, { type: 'start-wave' })
+        world.start()
+        vi.advanceTimersByTime(50 * 40)
+        const enemy = world.getEntities().find(entity => entity.data.type === 2)
+        const routeCells = new Set(mapPlan.roadLinks.flatMap(link => [
+            `${link.from.col}:${link.from.row}`,
+            `${link.to.col}:${link.to.row}`
+        ]))
+        world.stop()
+
+        expect(enemy).toBeDefined()
+        expect(routeCells.has(`${enemy!.x}:${enemy!.y}`)).toBe(true)
+    })
+
     it('uses the authoritative enemy archetype schedule', () => {
         vi.useFakeTimers()
         const source = new PathwardenWorld({ runId: 'run-9b-source', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
