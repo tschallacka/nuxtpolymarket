@@ -1190,7 +1190,7 @@ watch(realtime.choiceOffer, offer => {
   engine?.setAuthoritativeChoiceRevision(offer.offerRevision)
   if (offer.kind !== 'relic') return
   upgradeChoices.value = offer.choices
-    .map((choice, index) => PATHWARDEN_RELICS.find(relic => relic.id === offer.choiceKeys?.[index] ?? `server-relic-${choice}`))
+    .map((choice, index) => PATHWARDEN_RELICS.find(relic => relic.id === (offer.choiceKeys?.[index] ?? `server-relic-${choice}`)))
     .filter((relic): relic is PathwardenRelic => Boolean(relic))
 })
 
