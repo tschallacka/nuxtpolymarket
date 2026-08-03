@@ -108,6 +108,14 @@ export class PathwardenWorld {
             entityCount: 0
         }
         this.lastInputSequence = Math.max(0, Math.floor(source.gameState?.lastInputSequence ?? 0))
+        if (this.state.phase === 'checkpoint') {
+            this.choiceKind = 'checkpoint'
+            this.choices = [0, 1, 2]
+        } else if (this.state.phase === 'path') {
+            this.openNextChoice()
+        } else if (this.state.phase === 'upgrade') {
+            this.openRelicChoice()
+        }
         for (const tower of source.gameState?.towers ?? []) {
             this.spawnEntity({ type: 1, components: { towerType: tower.type, col: tower.col, row: tower.row, invested: tower.invested } }, tower.col, tower.row)
         }
