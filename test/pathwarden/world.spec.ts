@@ -155,4 +155,49 @@ describe('Pathwarden authoritative world', () => {
         expect(tower.data.components).toMatchObject({ relicFamily: 'fire', relicStacks: 1, relicPower: 1 })
         expect(world.getEntities().some(entity => entity.id === relicId)).toBe(false)
     })
+
+    it('scales repeated tower purchases and refunds half the investment', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-8', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const road = mapPlan.rooms.find(room => room.id === mapPlan.castleRoomId)!.roadCells
+        const candidates = Array.from({ length: 8 }, (_, index) => ({ col: road[0]!.col + index - 3, row: road[0]!.row + 3 }))
+            .filter(cell => world.canApply({ type: 'place-tower', ...cell }))
+        expect(candidates.length).toBeGreaterThanOrEqual(2)
+
+        world.enqueue(1, { type: 'place-tower', ...candidates[0]! })
+        world.start()
+        vi.advanceTimersByTime(50)
+        const first = world.getEntities().find(entity => entity.data.type === 1)!
+        const afterFirst = world.getSnapshot().aether
+
+        world.enqueue(2, { type: 'place-tower', ...candidates[1]! })
+        vi.advanceTimersByTime(50)
+        const towers = world.getEntities().filter(entity => entity.data.type === 1)
+        const second = towers.find(entity => entity.id !== first.id)!
+        const secondCost = afterFirst - world.getSnapshot().aether
+        expect(secondCost).toBeGreaterThan(Number(first.data.components?.invested ?? 0))
+
+        const beforeSalvage = world.getSnapshot().aether
+        world.enqueue(3, { type: 'salvage-tower', id: second.id })
+        vi.advanceTimersByTime(50)
+        world.stop()
+        expect(world.getSnapshot().aether).toBe(beforeSalvage + Math.floor(secondCost * 0.5))
+        expect(world.exportGameState().towerPurchases.bolt).toBe(2)
+    })
+
+    it('keeps enemy movement on the server road graph', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-9', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        world.enqueue(1, { type: 'start-wave' })
+        world.start()
+        vi.advanceTimersByTime(100)
+        world.stop()
+
+        const enemy = world.getEntities().find(entity => entity.data.type === 2)
+        expect(enemy).toBeDefined()
+        const roadCells = mapPlan.rooms
+            .filter(room => room.id === mapPlan.castleRoomId)
+            .flatMap(room => room.roadCells)
+        expect(roadCells).toContainEqual({ col: enemy!.x, row: enemy!.y })
+    })
 })

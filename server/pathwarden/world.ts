@@ -57,6 +57,7 @@ export class PathwardenWorld {
     private lastInputSequence = 0
     private nextEntityId = 1
     private selectedTower = 'bolt'
+    private towerPurchases: Record<string, number> = {}
     private spawnRemaining = 0
     private spawnCooldown = 0
     private ambientCooldown = 80
@@ -108,6 +109,7 @@ export class PathwardenWorld {
             entityCount: 0
         }
         this.lastInputSequence = Math.max(0, Math.floor(source.gameState?.lastInputSequence ?? 0))
+        this.towerPurchases = { ...(source.gameState?.towerPurchases ?? {}) }
         if (this.state.phase === 'checkpoint') {
             this.choiceKind = 'checkpoint'
             this.choices = [0, 1, 2]
@@ -236,7 +238,7 @@ export class PathwardenWorld {
             claimedRoomIds: [...this.claimedRooms],
             activeRoomIds: [...this.claimedRooms],
             selectedTower: this.selectedTower,
-            towerPurchases: {},
+            towerPurchases: { ...this.towerPurchases },
             relicRanks: {},
             globalRelics: {
                 server: { level: Math.round(this.state.relicPower * 10), power: this.state.relicPower }
@@ -362,7 +364,7 @@ export class PathwardenWorld {
         if (command.type === 'salvage-tower') {
             const tower = this.entities.get(command.id)!
             const components = tower.data.components ?? {}
-            this.state.aether += Math.floor(Number(components.invested ?? 0) * 0.6)
+            this.state.aether += Math.floor(Number(components.invested ?? 0) * 0.5)
             this.removeEntity(command.id)
             return true
         }
@@ -456,6 +458,7 @@ export class PathwardenWorld {
                 targeting: 'first'
             }
         }, command.col, command.row)
+        this.towerPurchases[this.selectedTower] = Math.max(0, Math.floor(this.towerPurchases[this.selectedTower] ?? 0)) + 1
         return Boolean(defense)
     }
 
@@ -483,7 +486,8 @@ export class PathwardenWorld {
                 }
                 continue
             }
-            this.updateEntity(enemy.id, { x: progress * 100, y: progress * 100, data: { type: 2, components: { ...components, progress } } })
+            const position = this.routePosition(progress)
+            this.updateEntity(enemy.id, { x: position.col, y: position.row, data: { type: 2, components: { ...components, progress } } })
         }
         this.simulateTowers()
         this.simulateProjectiles()
@@ -502,8 +506,8 @@ export class PathwardenWorld {
     }
 
     private spawnEnemy() {
-        const route = this.mapPlan.rooms.find(room => room.id === this.mapPlan.castleRoomId)?.roadCells ?? []
-        const start = route[0] ?? { col: 80, row: 80 }
+        const route = this.enemyRoute()
+        const start = route[route.length - 1] ?? { col: 80, row: 80 }
         const hp = 40 + this.state.wave * 12
         this.spawnEntity({
             type: 2,
@@ -676,8 +680,9 @@ export class PathwardenWorld {
         if (this.getEntities().some(entity => entity.data.type === 1 && entity.data.components?.col === command.col && entity.data.components?.row === command.row)) {
             return { allowed: false, reason: 'That ground already holds a defense.' }
         }
-        if (this.state.aether < defense.aetherCost) return { allowed: false, reason: 'Not enough Aether.' }
-        return { allowed: true, cost: defense.aetherCost }
+        const cost = this.towerCost(defense.id)
+        if (this.state.aether < cost) return { allowed: false, reason: 'Not enough Aether.' }
+        return { allowed: true, cost }
     }
 
     private validateTower(id: number, action: 'upgrade' | 'salvage') {
@@ -718,5 +723,32 @@ export class PathwardenWorld {
     private validateRelicBinding(command: Extract<PathwardenInputCommand, { type: 'bind-relic' }>) {
         if (this.state.phase !== 'planning') return false
         return this.entities.get(command.towerId)?.data.type === 1 && this.entities.get(command.instanceId)?.data.type === 5
+    }
+
+    private towerCost(towerType: string) {
+        const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === towerType)
+        if (!defense) return Number.POSITIVE_INFINITY
+        const purchases = Math.max(0, Math.floor(this.towerPurchases[towerType] ?? 0))
+        return Math.round(defense.aetherCost * (1 + purchases * 0.28))
+    }
+
+    private enemyRoute() {
+        const route: Array<{ col: number, row: number }> = []
+        const rooms = this.mapPlan.rooms
+            .filter(room => this.claimedRooms.has(room.id))
+            .sort((left, right) => left.depth - right.depth)
+        for (const room of rooms) {
+            for (const cell of room.roadCells) {
+                const previous = route[route.length - 1]
+                if (!previous || previous.col !== cell.col || previous.row !== cell.row) route.push({ col: cell.col, row: cell.row })
+            }
+        }
+        return route.length > 1 ? route : [{ col: 80, row: 80 }, { col: 81, row: 81 }]
+    }
+
+    private routePosition(progress: number) {
+        const route = this.enemyRoute()
+        const index = Math.min(route.length - 1, Math.floor((1 - Math.max(0, progress)) * (route.length - 1)))
+        return route[index]!
     }
 }
