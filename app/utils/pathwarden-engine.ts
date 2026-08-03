@@ -1358,6 +1358,17 @@ export class PathwardenEngine {
         baseEffects: emptyRelicEffects()
       }
     })
+    this.shockwaves = entities.filter(entity => entity.type === 6).map(entity => {
+      const position = this.gridToScreen({ col: entity.x, row: entity.y })
+      const progress = Number(entity.components?.progress ?? 0) / Number(entity.components?.duration ?? 8)
+      return {
+        ...position,
+        radius: 8 + progress * 32,
+        maxRadius: 50,
+        life: Math.max(0.05, 0.25 * (1 - progress)),
+        color: '#fef08a'
+      }
+    })
     this.emitState()
   }
 

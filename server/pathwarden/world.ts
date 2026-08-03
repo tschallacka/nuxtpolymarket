@@ -487,6 +487,7 @@ export class PathwardenWorld {
         }
         this.simulateTowers()
         this.simulateProjectiles()
+        this.simulateEffects()
         if (this.spawnRemaining === 0 && !this.getEntities().some(entity => entity.data.type === 2)) {
             this.state.aether += 20 + this.state.wave * 4
             this.state.score += 100 * this.state.wave
@@ -529,6 +530,7 @@ export class PathwardenWorld {
             const target = enemies[0]!
             this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: 8 } } })
             this.spawnEntity({ type: 3, components: {
+                towerType: String(components.towerType ?? 'bolt'),
                 sourceId: tower.id,
                 targetId: target.id,
                 damage: this.towerDamage(String(components.towerType ?? 'bolt')),
@@ -551,6 +553,7 @@ export class PathwardenWorld {
             if (progress >= 1) {
                 const hp = Number(target.data.components?.hp ?? 1) - Number(components.damage ?? 1)
                 this.removeEntity(projectile.id)
+                this.spawnEntity({ type: 6, components: { kind: 'impact', progress: 0, duration: 8, color: 'primary' } }, target.x, target.y)
                 if (hp <= 0) {
                     this.removeEntity(target.id)
                     this.state.score += 10
@@ -560,6 +563,15 @@ export class PathwardenWorld {
             } else {
                 this.updateEntity(projectile.id, { x: nextX, y: nextY, data: { type: 3, components: { ...components, progress } } })
             }
+        }
+    }
+
+    private simulateEffects() {
+        for (const effect of this.getEntities().filter(entity => entity.data.type === 6)) {
+            const components = effect.data.components ?? {}
+            const progress = Number(components.progress ?? 0) + 1
+            if (progress >= Number(components.duration ?? 8)) this.removeEntity(effect.id)
+            else this.updateEntity(effect.id, { data: { type: 6, components: { ...components, progress } } })
         }
     }
 
