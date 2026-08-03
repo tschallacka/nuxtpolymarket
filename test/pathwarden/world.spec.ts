@@ -237,8 +237,9 @@ describe('Pathwarden authoritative world', () => {
         expect(restored.getSnapshot()).toMatchObject({ phase: 'wave', wave: 3, entityCount: 3 })
         expect(restored.lastAppliedInput).toBe(12)
         expect(restored.getEntities().map(entity => entity.id)).toEqual(expect.arrayContaining([10, 20, 30]))
+        expect(restored.getEntities().find(entity => entity.id === 10)?.data.components).toMatchObject({ level: 2, targeting: 'strong' })
         expect(restored.getEntities().find(entity => entity.id === 20)?.data.components).toMatchObject({ enemyType: 'brute', hp: 80 })
-        expect(restored.getEntities().find(entity => entity.id === 30)?.data.components).toMatchObject({ targetId: 20, damage: 32 })
+        expect(restored.getEntities().find(entity => entity.id === 30)?.data.components).toMatchObject({ targetId: 20, damage: 32, splash: 0, slow: 0 })
     })
 
     it('bounds queued inputs before the tick can consume them', () => {

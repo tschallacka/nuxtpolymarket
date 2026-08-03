@@ -165,7 +165,11 @@ export class PathwardenWorld {
                 towerType: projectile.type,
                 targetId: projectile.targetId,
                 damage: projectile.damage,
-                progress: projectile.age
+                progress: projectile.age,
+                splash: projectile.splash,
+                slow: projectile.slow,
+                speed: projectile.speed,
+                duration: projectile.duration
             } }, projectile.x, projectile.y, 0, 0, 0, 0, projectile.id)
         }
         for (const relic of source.gameState?.relicInventory ?? []) this.spawnRelic(relic)
@@ -321,9 +325,9 @@ export class PathwardenWorld {
                 invested: Number(entity.data.components?.invested ?? 0),
                 cooldown: Number(entity.data.components?.cooldown ?? 0),
                 angle: 0,
-                level: 1,
+                level: Number(entity.data.components?.level ?? 1),
                 merges: 0,
-                targeting: 'first' as const,
+                targeting: (String(entity.data.components?.targeting ?? 'first') as 'first' | 'strong' | 'fast'),
                 relicFamily: entity.data.components?.relicFamily ? String(entity.data.components.relicFamily) : undefined,
                 relicId: entity.data.components?.relicId ? String(entity.data.components.relicId) : undefined,
                 relicStacks: Number(entity.data.components?.relicStacks ?? 0),
@@ -352,21 +356,21 @@ export class PathwardenWorld {
                 id: entity.id,
                 type: String(entity.data.components?.towerType ?? 'bolt'),
                 targetId: Number(entity.data.components?.targetId ?? 0),
-                relicPower: 0,
+                relicPower: Number(entity.data.components?.relicPower ?? 0),
                 echo: false,
                 x: entity.x,
                 y: entity.y,
                 damage: Number(entity.data.components?.damage ?? 1),
-                speed: 1,
-                splash: 0,
+                speed: Number(entity.data.components?.speed ?? 1),
+                splash: Number(entity.data.components?.splash ?? 0),
                 splashFactor: 0,
-                slow: 0,
+                slow: Number(entity.data.components?.slow ?? 0),
                 color: 'primary',
                 size: 4,
                 trail: [],
                 origin: { col: entity.x, row: entity.y },
                 age: Number(entity.data.components?.progress ?? 0),
-                duration: 1,
+                duration: Number(entity.data.components?.duration ?? 1),
                 arcHeight: 0
             })),
             towerId: this.nextEntityId,
@@ -647,7 +651,7 @@ export class PathwardenWorld {
                 towerType: String(components.towerType ?? 'bolt'),
                 sourceId: tower.id,
                 targetId: target.id,
-                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1)),
+                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), Number(components.relicPower ?? 0)),
                 splash: defense.splash / 45,
                 slow: defense.slow,
                 progress: 0
@@ -735,10 +739,10 @@ export class PathwardenWorld {
         }
     }
 
-    private towerDamage(type: string, level: number) {
+    private towerDamage(type: string, level: number, relicPower = 0) {
         const base = PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25
         const levelPower = level >= 3 ? 3.35 : level >= 2 ? 1.85 : 1
-        return base * levelPower * (1 + this.state.relicPower)
+        return base * levelPower * (1 + this.state.relicPower + Math.max(0, relicPower))
     }
 
     private spawnRelic(relic: PathwardenSavedRelic) {
