@@ -2218,6 +2218,7 @@ export class PathwardenEngine {
       return
     }
     this.callbacks.onCommand?.({ type: 'bind-relic', towerId: tower.id, instanceId: relic.instanceId })
+    if (this.serverAuthoritative) return
     tower.relicFamily = relic.family
     tower.relicId = relic.id
     tower.relicStacks++
@@ -2552,6 +2553,11 @@ export class PathwardenEngine {
     if (!tower) return
     const salvage = this.salvageValue(tower)
     this.callbacks.onCommand?.({ type: 'salvage-tower', id: tower.id })
+    if (this.serverAuthoritative) {
+      this.message = 'Dismantle command sent to the Warden.'
+      this.emitState()
+      return
+    }
     this.towers.splice(this.towers.indexOf(tower), 1)
     this.aether += salvage
     this.selectedTowerId = null
@@ -2568,6 +2574,11 @@ export class PathwardenEngine {
     const cost = 40 * tower.level
     if (this.aether < cost) return
     this.callbacks.onCommand?.({ type: 'upgrade-tower', id: tower.id })
+    if (this.serverAuthoritative) {
+      this.message = 'Upgrade command sent to the Warden.'
+      this.emitState()
+      return
+    }
     tower.level += 1
     tower.invested += cost
     this.aether -= cost
@@ -4436,6 +4447,11 @@ export class PathwardenEngine {
         this.message = 'That defense has already reached its final form.'
       } else {
         this.callbacks.onCommand?.({ type: 'fuse-tower', sourceId: tower.id, targetId: target.id })
+        if (this.serverAuthoritative) {
+          this.message = 'Fusion command sent to the Warden.'
+          this.emitState()
+          return
+        }
         this.towers.splice(this.towers.indexOf(tower), 1)
         target.level++
         target.merges += tower.merges + 1
@@ -4457,9 +4473,14 @@ export class PathwardenEngine {
       this.emitState()
       return
     }
+    this.callbacks.onCommand?.({ type: 'move-tower', id: tower.id, col: targetCell.col, row: targetCell.row })
+    if (this.serverAuthoritative) {
+      this.message = 'Reposition command sent to the Warden.'
+      this.emitState()
+      return
+    }
     tower.col = targetCell.col
     tower.row = targetCell.row
-    this.callbacks.onCommand?.({ type: 'move-tower', id: tower.id, col: targetCell.col, row: targetCell.row })
     this.selectedTowerId = tower.id
     this.message = `${towerStats(tower.type).name} repositioned.`
     this.emitState()
@@ -4523,6 +4544,12 @@ export class PathwardenEngine {
       })
       this.burst({ x: position.x, y: position.y - 10 }, '#fb7185', 9, 95)
     } else {
+      if (this.serverAuthoritative) {
+        this.callbacks.onCommand?.({ type: 'place-tower', col: cell.col, row: cell.row })
+        this.message = `${stats.name} placement requested.`
+        this.emitState()
+        return
+      }
       this.aether -= cost
       this.towerPurchases[this.selectedTower] = (this.towerPurchases[this.selectedTower] ?? 0) + 1
       this.towers.push({
