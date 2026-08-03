@@ -274,6 +274,27 @@ describe('Pathwarden authoritative world', () => {
         expect(restored.getEntities().find(entity => entity.id === 30)?.data.components).toMatchObject({ targetId: 20, damage: 32, splash: 0, slow: 0 })
     })
 
+    it('emits one stable server gameplay event when a projectile impacts', () => {
+        vi.useFakeTimers()
+        const source = new PathwardenWorld({ runId: 'run-event', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        source.spawnEntity({ type: 2, components: { enemyType: 'raider', progress: 0, hp: 100, maxHp: 100, reward: 1 } }, 0, 0, 0, 0, 0, 0, 20)
+        source.spawnEntity({ type: 3, components: { towerType: 'bolt', targetId: 20, damage: 1, progress: 0.75 } }, 0, 0, 0, 0, 0, 0, 30)
+        const saved = source.exportGameState()
+        saved.phase = 'wave'
+        const world = new PathwardenWorld({ runId: 'run-event', revision: 0, realm: 1, seed: 1, mapPlan, gameState: saved })
+        const events: Array<Array<{ id: number, type: number }>> = []
+        world.setChangeHandler((_snapshot, _entities, tickEvents) => events.push(tickEvents))
+        world.start()
+        vi.advanceTimersByTime(50)
+        vi.advanceTimersByTime(50)
+        world.stop()
+
+        const impactEvents = events.flat().filter(event => event.type === 1)
+        expect(impactEvents).toHaveLength(1)
+        expect(impactEvents[0]!.id).toBeGreaterThan(0)
+        expect(new Set(impactEvents.map(event => event.id)).size).toBe(1)
+    })
+
     it('bounds queued inputs before the tick can consume them', () => {
         const world = new PathwardenWorld({ runId: 'run-11', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
         for (let sequence = 1; sequence <= 256; sequence++) {
