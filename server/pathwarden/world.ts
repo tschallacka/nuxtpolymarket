@@ -87,6 +87,7 @@ export class PathwardenWorld {
     private choiceKind: 'checkpoint' | 'relic' | 'path' | null = null
     private choiceRevision = 0
     private choices: number[] = []
+    private choiceKeys: string[] = []
     private batching = false
     private dirty = false
     private onChange: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void = () => {}
@@ -157,6 +158,7 @@ export class PathwardenWorld {
         if (this.state.phase === 'checkpoint') {
             this.choiceKind = 'checkpoint'
             this.choices = [0, 1, 2]
+            this.choiceKeys = ['cashout', 'continue', 'bonus']
             this.choiceRevision = 1
         } else if (this.state.phase === 'path') {
             this.openNextChoice()
@@ -261,7 +263,9 @@ export class PathwardenWorld {
     }
 
     getChoiceOffer() {
-        return this.choiceKind ? { kind: this.choiceKind, choices: [...this.choices], offerRevision: this.choiceRevision } : null
+        return this.choiceKind
+            ? { kind: this.choiceKind, choices: [...this.choices], choiceKeys: [...this.choiceKeys], offerRevision: this.choiceRevision }
+            : null
     }
 
     getSnapshot() {
@@ -588,6 +592,7 @@ export class PathwardenWorld {
             }
             this.choiceKind = null
             this.choices = []
+            this.choiceKeys = []
             this.state.phase = command.type === 'relic-choice' ? 'planning' : 'planning'
             return true
         }
@@ -679,6 +684,7 @@ export class PathwardenWorld {
                 this.state.phase = 'checkpoint'
                 this.choiceKind = 'checkpoint'
                 this.choices = [0, 1, 2]
+                this.choiceKeys = ['cashout', 'continue', 'bonus']
             } else {
                 this.openNextChoice()
             }
@@ -909,6 +915,7 @@ export class PathwardenWorld {
         this.state.phase = 'upgrade'
         this.choiceKind = 'relic'
         this.choices = [0, 1, 2]
+        this.choiceKeys = ['fire-common', 'frost-common', 'bounty-common']
         this.choiceRevision++
     }
 
@@ -918,6 +925,7 @@ export class PathwardenWorld {
             this.state.phase = 'path'
             this.choiceKind = 'path'
             this.choices = paths.map((_, index) => index)
+            this.choiceKeys = paths
             this.choiceRevision++
         } else this.openRelicChoice()
     }

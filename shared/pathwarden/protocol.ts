@@ -527,13 +527,17 @@ export function encodeGameplayEvent(event: PathwardenGameplayEvent, header: Part
     return encodePacket({ kind: PathwardenPacketKind.GameplayEvent, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
-export function encodeChoiceOffer(kind: 'checkpoint' | 'relic' | 'path', choices: number[], header: Partial<PathwardenPacketHeader> = {}, offerRevision = 0) {
+export function encodeChoiceOffer(kind: 'checkpoint' | 'relic' | 'path', choices: number[], header: Partial<PathwardenPacketHeader> = {}, offerRevision = 0, choiceKeys: string[] = []) {
     if (choices.length > 8) throw new Error('Pathwarden choice count exceeds protocol limit')
+    if (choiceKeys.length > choices.length) throw new Error('Pathwarden choice key count exceeds choice count')
     const payload = new ByteWriter()
     payload.u8(kind === 'checkpoint' ? 1 : kind === 'relic' ? 2 : 3)
     payload.u32(offerRevision)
     payload.varUint(choices.length)
-    for (const choice of choices) payload.varUint(choice)
+    for (let index = 0; index < choices.length; index++) {
+        payload.varUint(choices[index]!)
+        payload.string(choiceKeys[index] ?? '', 96)
+    }
     return encodePacket({ kind: PathwardenPacketKind.ChoiceOffer, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
@@ -719,10 +723,17 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
         const offerRevision = payloadReader.u32()
         const count = payloadReader.varUint()
         if (count > 8) throw new Error('Pathwarden choice count exceeds protocol limit')
+        const choices: number[] = []
+        const choiceKeys: string[] = []
+        for (let index = 0; index < count; index++) {
+            choices.push(payloadReader.varUint())
+            choiceKeys.push(payloadReader.string(96))
+        }
         payload = {
             kind: kind === 1 ? 'checkpoint' : kind === 2 ? 'relic' : 'path',
             offerRevision,
-            choices: Array.from({ length: count }, () => payloadReader.varUint())
+            choices,
+            choiceKeys
         }
     }
     if (!payloadReader.done()) throw new Error('Trailing Pathwarden packet data')

@@ -27,7 +27,7 @@ export function usePathwardenRealtime() {
     const entities = ref<PathwardenEntityState[]>([])
     const events = ref<PathwardenGameplayEvent[]>([])
     const receivedEventIds = new Set<number>()
-    const choiceOffer = ref<{ kind: 'checkpoint' | 'relic' | 'path', choices: number[], offerRevision: number } | null>(null)
+    const choiceOffer = ref<{ kind: 'checkpoint' | 'relic' | 'path', choices: number[], choiceKeys?: string[], offerRevision: number } | null>(null)
     const mapChunks = new Map<number, Uint8Array>()
     let expectedMapChunks = 0
     const predictedSnapshot = ref<PathwardenWorldSnapshot | null>(null)
