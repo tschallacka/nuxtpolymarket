@@ -807,7 +807,10 @@ export class PathwardenWorld {
                 this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: cooldown - 1 } } })
                 continue
             }
-            const range = Math.max(2, defense.range / 45 * this.boosts.rangeMultiplier)
+            const relicFamily = String(components.relicFamily ?? '')
+            const relicPower = Number(components.relicPower ?? 0)
+            const relicEffects = this.relicEffects(relicFamily, relicPower)
+            const range = Math.max(2, defense.range / 45 * this.boosts.rangeMultiplier * (1 + relicEffects.rangePct / 100))
             const inRange = enemies.filter(enemy => Math.hypot(enemy.x - tower.x, enemy.y - tower.y) <= range)
             if (!inRange.length) continue
             const targeting = String(components.targeting ?? 'first')
@@ -816,9 +819,6 @@ export class PathwardenWorld {
                 : targeting === 'fast'
                     ? Number(right.data.components?.speed ?? 1) - Number(left.data.components?.speed ?? 1)
                     : Number(right.data.components?.progress ?? 0) - Number(left.data.components?.progress ?? 0))[0]!
-            const relicFamily = String(components.relicFamily ?? '')
-            const relicPower = Number(components.relicPower ?? 0)
-        const relicEffects = this.relicEffects(relicFamily, relicPower)
             this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: Math.max(1, Math.round(defense.rate * 20 / (this.boosts.rateMultiplier * (1 + relicEffects.attackSpeedPct / 100)))) } } })
             this.spawnEntity({ type: 3, components: {
                 towerType: String(components.towerType ?? 'bolt'),
@@ -831,6 +831,7 @@ export class PathwardenWorld {
                 slow: Math.max(defense.slow, relicEffects.slowPct / 100),
                 burnDamage: relicEffects.burnPct > 0 ? this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * this.boosts.damageMultiplier * relicEffects.burnPct / 100 : 0,
                 burnDuration: relicEffects.burnDuration * 20,
+                aetherBonusPct: relicEffects.aetherBonusPct,
                 progress: 0
             } }, tower.x, tower.y, 0, target.x, target.y)
         }
@@ -862,7 +863,7 @@ export class PathwardenWorld {
                         this.removeEntity(victim.id)
                         this.emitGameplayEvent(PathwardenGameplayEventType.EnemyDefeated, victim.id, victim.x, victim.y)
                         this.state.score += 10
-                        this.state.aether += Math.max(0, Number(victimComponents.reward ?? 0))
+                        this.state.aether += Math.max(0, Number(victimComponents.reward ?? 0)) * (1 + Number(components.aetherBonusPct ?? 0) / 100)
                     } else {
                         this.updateEntity(victim.id, { data: { type: 2, components: {
                             ...victimComponents,
