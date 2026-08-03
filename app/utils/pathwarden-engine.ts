@@ -16,7 +16,7 @@ import type {
   PathwardenGameState,
   PathwardenMapPlan
 } from '#shared/types/pathwarden-save'
-import type { PathwardenInputCommand } from '#shared/pathwarden/protocol'
+import type { PathwardenEntityState, PathwardenInputCommand } from '#shared/pathwarden/protocol'
 
 const WIDTH = 1200
 const HEIGHT = 760
@@ -791,6 +791,7 @@ export class PathwardenEngine {
   private towers: Tower[] = []
   private enemies: Enemy[] = []
   private projectiles: Projectile[] = []
+  private serverAuthoritative = false
   private particles: Particle[] = []
   private floatingTexts: FloatingText[] = []
   private failedPlacement: FailedPlacement | null = null
@@ -1211,6 +1212,65 @@ export class PathwardenEngine {
     this.aether = Math.max(0, authoritative.aether)
     this.score = Math.max(0, authoritative.score)
     this.paused = authoritative.paused
+    this.emitState()
+  }
+
+  applyAuthoritativeEntities(entities: PathwardenEntityState[]) {
+    if (this.destroyed) return
+    this.serverAuthoritative = true
+    const enemyVisual: Record<EnemyType, { radius: number, color: string }> = {
+      raider: { radius: 13, color: '#fb923c' },
+      runner: { radius: 10, color: '#c4b5fd' },
+      brute: { radius: 18, color: '#fb7185' },
+      shaman: { radius: 15, color: '#4ade80' },
+      boss: { radius: 29, color: '#facc15' }
+    }
+    this.towers = entities.filter(entity => entity.type === 1).map(entity => {
+      const components = entity.components ?? {}
+      const type = String(components.towerType ?? 'bolt')
+      return {
+        id: entity.id,
+        col: Number(components.col ?? entity.x),
+        row: Number(components.row ?? entity.y),
+        type,
+        invested: Number(components.invested ?? 0),
+        cooldown: Number(components.cooldown ?? 0),
+        angle: 0,
+        level: 1,
+        merges: 0,
+        recoil: 0,
+        targeting: 'first',
+        relicStacks: 0,
+        relicPower: 0,
+        relicShots: 0
+      }
+    })
+    this.enemies = entities.filter(entity => entity.type === 2).map(entity => {
+      const components = entity.components ?? {}
+      const type = (String(components.enemyType ?? 'raider') in enemyVisual ? String(components.enemyType ?? 'raider') : 'raider') as EnemyType
+      return {
+        id: entity.id,
+        type,
+        route: this.path.map(point => ({ ...point })),
+        exitKey: 'castle-main',
+        progress: Number(components.progress ?? 0),
+        hp: Number(components.hp ?? 1),
+        maxHp: Number(components.maxHp ?? 1),
+        speed: 1,
+        reward: Number(components.reward ?? 0),
+        radius: enemyVisual[type].radius,
+        slow: 0,
+        slowTimer: 0,
+        healTimer: 0,
+        color: enemyVisual[type].color,
+        hitFlash: 0,
+        attackTimer: 0,
+        dotDamage: 0,
+        dotTimer: 0,
+        dotTick: 0
+      }
+    })
+    this.projectiles = []
     this.emitState()
   }
 
@@ -2713,7 +2773,7 @@ export class PathwardenEngine {
     this.lastFrame = now
     if (!this.introStoryActive && !this.openingCinematicActive) this.updateCamera(delta)
     if (!this.paused) this.updateEffects(simulationDelta)
-    if (!this.paused && this.phase === 'wave') this.updateCombat(simulationDelta)
+    if (!this.paused && this.phase === 'wave' && !this.serverAuthoritative) this.updateCombat(simulationDelta)
     this.render()
     this.animationFrame = requestAnimationFrame(this.frame)
   }

@@ -1141,7 +1141,13 @@ onMounted(async () => {
 })
 
 watch(realtime.snapshot, authoritative => {
-  if (authoritative) engine?.applyAuthoritativeSnapshot(authoritative)
+  if (!authoritative) return
+  engine?.applyAuthoritativeSnapshot(authoritative)
+  if ((authoritative.phase === 'defeat' || authoritative.phase === 'victory') && runActive.value) void settleRun(authoritative.phase)
+})
+
+watch(realtime.entities, entities => {
+  engine?.applyAuthoritativeEntities(entities)
 })
 
 onBeforeUnmount(() => {
