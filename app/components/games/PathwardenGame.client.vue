@@ -980,24 +980,6 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
     onUpgrade: choices => { upgradeChoices.value = choices },
     onOpenBuildingInventory: openBuildingInventory,
     onOpenArcanistWorkbench: openArcanistWorkbench,
-    onAmbientStoryComplete: async (storyId) => {
-      try {
-        const progress = await $fetch('/api/pathwarden/ambient', {
-          method: 'POST',
-          body: { storyId }
-        })
-        if (progress.achievementUnlocked) {
-          toast.add({
-            title: 'Village Chronicler unlocked',
-            description: 'You witnessed all 250 village stories. Your next permanent upgrade is free.',
-            color: 'success'
-          })
-        }
-        await refreshBoosts()
-      } catch {
-        // Ambient theatre must never interrupt a run when progress syncing fails.
-      }
-    },
     onGameOver: async (won) => {
       await settleRun(won ? 'victory' : 'defeat')
     },
