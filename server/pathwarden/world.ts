@@ -60,7 +60,7 @@ export class PathwardenWorld {
     private towerPurchases: Record<string, number> = {}
     private spawnRemaining = 0
     private spawnCooldown = 0
-    private ambientCooldown = 80
+    private ambientCooldown = 0
     private nextAmbientStoryId = 1
     private nextRelicInstanceId = 1
     private choiceKind: 'checkpoint' | 'relic' | 'path' | null = null
@@ -115,6 +115,7 @@ export class PathwardenWorld {
         this.selectedTower = source.gameState?.selectedTower ?? 'bolt'
         this.spawnRemaining = Math.max(0, Math.floor(source.gameState?.spawnLeft ?? 0))
         this.spawnCooldown = Math.max(0, Math.floor(source.gameState?.spawnTimer ?? 0))
+        this.ambientCooldown = 900 + (source.seed % 4501)
         if (this.state.phase === 'checkpoint') {
             this.choiceKind = 'checkpoint'
             this.choices = [0, 1, 2]
@@ -684,10 +685,15 @@ export class PathwardenWorld {
             const road = this.mapPlan.rooms.find(room => this.claimedRooms.has(room.id))?.roadCells[0] ?? { col: 0, row: 0 }
             this.spawnEntity({
                 type: 4,
-                components: { storyId: this.nextAmbientStoryId, progress: 0, duration: 120, kind: 'market' }
+                components: {
+                    storyId: this.nextAmbientStoryId,
+                    progress: 0,
+                    duration: 1800 + ((this.nextAmbientStoryId * 7919 + this.state.seed) % 4201),
+                    kind: 'market'
+                }
             }, road.col, road.row)
             this.nextAmbientStoryId = this.nextAmbientStoryId % 250 + 1
-            this.ambientCooldown = 260
+            this.ambientCooldown = 900 + ((this.nextAmbientStoryId * 3571 + this.state.seed) % 4501)
             return
         }
         const components = ambient.data.components ?? {}

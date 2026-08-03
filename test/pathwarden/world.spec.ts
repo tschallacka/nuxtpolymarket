@@ -230,4 +230,16 @@ describe('Pathwarden authoritative world', () => {
         expect(world.pendingCommandCount).toBe(256)
         expect(world.enqueue(257, { type: 'select-tower', tower: 'bolt' })).toBe(false)
     })
+
+    it('stages ambient stories on a slow deterministic schedule', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-12', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        world.start()
+        vi.advanceTimersByTime(50 * 902)
+        const ambient = world.getEntities().find(entity => entity.data.type === 4)
+        world.stop()
+        expect(ambient).toBeDefined()
+        expect(Number(ambient!.data.components?.duration)).toBeGreaterThanOrEqual(1800)
+        expect(Number(ambient!.data.components?.duration)).toBeLessThanOrEqual(6000)
+    })
 })
