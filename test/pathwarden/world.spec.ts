@@ -359,6 +359,7 @@ describe('Pathwarden authoritative world', () => {
         expect(ambient).toBeDefined()
         expect(Number(ambient!.data.components?.duration)).toBeGreaterThanOrEqual(1800)
         expect(Number(ambient!.data.components?.duration)).toBeLessThanOrEqual(6000)
+        expect(ambient!.data.components).toMatchObject({ family: 'Market day', kind: 'market', variant: 1 })
     })
 
     it('rejects stale choice offer revisions', () => {

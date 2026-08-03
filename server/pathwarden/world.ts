@@ -1,5 +1,5 @@
 import type { PathwardenGameState, PathwardenMapPlan, PathwardenSavedRelic } from '#shared/types/pathwarden-save'
-import { PATHWARDEN_DEFENSE_BLUEPRINTS } from '#shared/utils/gamelogic/pathwarden'
+import { PATHWARDEN_AMBIENT_FAMILIES, PATHWARDEN_DEFENSE_BLUEPRINTS } from '#shared/utils/gamelogic/pathwarden'
 import type {
     PathwardenInputCommand,
     PathwardenPhase,
@@ -870,13 +870,17 @@ export class PathwardenWorld {
             this.ambientCooldown--
             if (this.ambientCooldown > 0) return
             const road = this.mapPlan.rooms.find(room => this.claimedRooms.has(room.id))?.roadCells[0] ?? { col: 0, row: 0 }
+            const storyId = this.nextAmbientStoryId
+            const family = PATHWARDEN_AMBIENT_FAMILIES[Math.floor((storyId - 1) / 10)]!
             this.spawnEntity({
                 type: 4,
                 components: {
-                    storyId: this.nextAmbientStoryId,
+                    storyId,
                     progress: 0,
-                    duration: 1800 + ((this.nextAmbientStoryId * 7919 + this.state.seed) % 4201),
-                    kind: 'market'
+                    duration: 1800 + ((storyId * 7919 + this.state.seed) % 4201),
+                    family: family.name,
+                    kind: family.kind,
+                    variant: (storyId - 1) % 10 + 1
                 }
             }, road.col, road.row)
             this.nextAmbientStoryId = this.nextAmbientStoryId % 250 + 1

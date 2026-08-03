@@ -1,5 +1,6 @@
 import {
   PATHWARDEN_AMBIENT_STORY_COUNT,
+  PATHWARDEN_AMBIENT_FAMILIES,
   PATHWARDEN_DEFENSE_BLUEPRINTS,
   type PathwardenDefenseArchetype,
   type PathwardenDefenseBlueprint,
@@ -457,33 +458,7 @@ interface AmbientActor {
   countsForProgress: boolean
 }
 
-const AMBIENT_FAMILIES: Array<{ name: string, kind: AmbientKind }> = [
-  { name: 'Market day', kind: 'market' },
-  { name: 'Hunter and deer', kind: 'hunt' },
-  { name: 'Lovers’ picnic', kind: 'picnic' },
-  { name: 'Travelling musician', kind: 'musician' },
-  { name: 'Children at play', kind: 'children' },
-  { name: 'Shepherd’s crossing', kind: 'shepherd' },
-  { name: 'Guard patrol', kind: 'patrol' },
-  { name: 'Peddler', kind: 'peddler' },
-  { name: 'Construction crew', kind: 'crew' },
-  { name: 'Cat business', kind: 'cat' },
-  { name: 'Bird life', kind: 'bird' },
-  { name: 'Dog and courier', kind: 'peddler' },
-  { name: 'Bakers’ delivery', kind: 'market' },
-  { name: 'Fisher’s tale', kind: 'peddler' },
-  { name: 'Lost chicken', kind: 'children' },
-  { name: 'Knight training', kind: 'patrol' },
-  { name: 'Herbalist', kind: 'crew' },
-  { name: 'Pilgrim procession', kind: 'shepherd' },
-  { name: 'Rainy scramble', kind: 'market' },
-  { name: 'Festival rehearsal', kind: 'musician' },
-  { name: 'Scholar and apprentice', kind: 'crew' },
-  { name: 'Beekeeper', kind: 'market' },
-  { name: 'Tiny creatures', kind: 'cat' },
-  { name: 'Royal inspection', kind: 'patrol' },
-  { name: 'Midnight oddities', kind: 'bird' }
-]
+const AMBIENT_FAMILIES: Array<{ name: string, kind: AmbientKind }> = PATHWARDEN_AMBIENT_FAMILIES.map(family => ({ ...family }))
 
 // Canonical count lives in shared so the server, the achievement and the engine
 // agree; every family here contributes ten stories, so this list stays at
@@ -1368,11 +1343,12 @@ export class PathwardenEngine {
     this.ambientActors = entities.filter(entity => entity.type === 4).map(entity => {
       const components = entity.components ?? {}
       const duration = Number(components.duration ?? 120)
+      const kind = String(components.kind ?? 'market') as AmbientKind
       return {
         id: entity.id,
         storyId: Number(components.storyId ?? 1),
         blockKey: `${Math.round(entity.x)}:${Math.round(entity.y)}`,
-        kind: 'market' as const,
+        kind,
         age: Number(components.progress ?? 0) * duration,
         duration,
         seed: Number(components.storyId ?? 1) * 13.71,

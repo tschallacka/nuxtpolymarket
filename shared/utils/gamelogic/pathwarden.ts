@@ -8,6 +8,34 @@ export const PATHWARDEN_SURGE_COST_GEMS = 5
 export const PATHWARDEN_MAX_WAVE = 12
 export const PATHWARDEN_AMBIENT_STORY_COUNT = 250
 
+export const PATHWARDEN_AMBIENT_FAMILIES = [
+    { name: 'Market day', kind: 'market' },
+    { name: 'Hunter and deer', kind: 'hunt' },
+    { name: 'Lovers’ picnic', kind: 'picnic' },
+    { name: 'Travelling musician', kind: 'musician' },
+    { name: 'Children at play', kind: 'children' },
+    { name: 'Shepherd’s crossing', kind: 'shepherd' },
+    { name: 'Guard patrol', kind: 'patrol' },
+    { name: 'Peddler', kind: 'peddler' },
+    { name: 'Construction crew', kind: 'crew' },
+    { name: 'Cat business', kind: 'cat' },
+    { name: 'Bird life', kind: 'bird' },
+    { name: 'Dog and courier', kind: 'peddler' },
+    { name: 'Bakers’ delivery', kind: 'market' },
+    { name: 'Fisher’s tale', kind: 'peddler' },
+    { name: 'Lost chicken', kind: 'children' },
+    { name: 'Knight training', kind: 'patrol' },
+    { name: 'Herbalist', kind: 'crew' },
+    { name: 'Pilgrim procession', kind: 'shepherd' },
+    { name: 'Rainy scramble', kind: 'market' },
+    { name: 'Festival rehearsal', kind: 'musician' },
+    { name: 'Scholar and apprentice', kind: 'crew' },
+    { name: 'Beekeeper', kind: 'market' },
+    { name: 'Tiny creatures', kind: 'cat' },
+    { name: 'Royal inspection', kind: 'patrol' },
+    { name: 'Midnight oddities', kind: 'bird' }
+] as const
+
 // Ambient stories surface on a 45-300s in-game timer, so a real player never
 // records two within 20s. Enforcing that floor server-side turns the "POST
 // storyId 1..250 in a loop" forge into a many-hour grind against an active run.
