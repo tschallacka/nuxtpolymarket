@@ -2,6 +2,7 @@ import type { Peer } from 'crossws'
 import { db } from '#server/database'
 import { pathwardenRuns } from '#server/database/schema'
 import { auth } from '#server/utils/auth'
+import { PathwardenWorld } from '#server/pathwarden/world'
 import {
     decodePacket,
     encodeCommandAck,
@@ -9,8 +10,7 @@ import {
     encodeProtocolError,
     encodeWorldSnapshot,
     PathwardenPacketKind,
-    type PathwardenInputCommand,
-    type PathwardenWorldSnapshot
+    type PathwardenInputCommand
 } from '#shared/pathwarden/protocol'
 
 interface ActiveSession {
@@ -18,9 +18,7 @@ interface ActiveSession {
     userId: string
     runId: string
     nextPacketSequence: number
-    lastInputSequence: number
-    tick: number
-    snapshot: PathwardenWorldSnapshot
+    world: PathwardenWorld
 }
 
 const sessions = new Map<string, ActiveSession>()
@@ -53,34 +51,23 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
         where: (table, operators) => operators.and(operators.eq(table.id, runId), operators.eq(table.userId, userId))
     })
     if (!run) throw createError({ statusCode: 404, statusMessage: 'Pathwarden run not found' })
-    const snapshot: PathwardenWorldSnapshot = {
+    const world = new PathwardenWorld({
         runId: run.id,
         revision: run.revision,
         realm: run.realm,
         seed: Number(run.seed) >>> 0,
-        tick: 0,
-        phase: 'planning',
-        wave: 0,
-        lives: 20,
-        aether: 0,
-        score: 0,
-        paused: false,
-        entityCount: 0
-    }
-    return { peer, userId, runId, nextPacketSequence: 1, lastInputSequence: 0, tick: 0, snapshot }
+        gameState: run.gameState ?? null
+    })
+    return { peer, userId, runId, nextPacketSequence: 1, world }
 }
 
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
-    if (inputSequence <= session.lastInputSequence) return
-    session.lastInputSequence = inputSequence
-    if (command.type === 'pause') session.snapshot = { ...session.snapshot, paused: command.value }
-    if (command.type === 'start-wave' && session.snapshot.phase === 'planning') session.snapshot = { ...session.snapshot, phase: 'wave', wave: Math.max(1, session.snapshot.wave + 1) }
-    if (command.type === 'select-tower') return
+    if (!session.world.enqueue(inputSequence, command)) return
     if (command.type === 'place-tower') {
-        send(session, encodeCommandAck(inputSequence, session.tick, false, 'Placement authority is not enabled in this migration slice'))
+        send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, 'Placement authority is not enabled in this migration slice'))
         return
     }
-    send(session, encodeCommandAck(inputSequence, session.tick, true))
+    send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
 }
 
 export async function openPathwardenSession(peer: Peer) {
@@ -88,9 +75,14 @@ export async function openPathwardenSession(peer: Peer) {
     if (!session) return
     const previous = sessions.get(session.runId)
     previous?.peer.close(4009, 'Replaced by a newer Pathwarden session')
+    previous?.world.stop()
+    session.world.setChangeHandler(snapshot => {
+        send(session, encodeWorldSnapshot(snapshot, { sequence: session.nextPacketSequence++, acknowledgedInput: session.world.lastAppliedInput }))
+    })
     sessions.set(session.runId, session)
     send(session, encodeHelloAck({ sequence: session.nextPacketSequence++ }))
-    send(session, encodeWorldSnapshot(session.snapshot, { sequence: session.nextPacketSequence++ }))
+    send(session, encodeWorldSnapshot(session.world.getSnapshot(), { sequence: session.nextPacketSequence++ }))
+    session.world.start()
 }
 
 export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): ArrayBuffer | SharedArrayBuffer }) {
@@ -109,6 +101,9 @@ export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): Ar
 
 export function closePathwardenSession(peer: Peer) {
     for (const [runId, session] of sessions) {
-        if (session.peer === peer) sessions.delete(runId)
+        if (session.peer === peer) {
+            session.world.stop()
+            sessions.delete(runId)
+        }
     }
 }
