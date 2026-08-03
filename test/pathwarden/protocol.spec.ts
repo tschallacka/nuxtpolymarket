@@ -25,6 +25,7 @@ describe('Pathwarden binary gameplay protocol', () => {
             lives: 19,
             aether: 123.45,
             score: 9001,
+            relicPower: 0.4,
             paused: false,
             entityCount: 42
         }, { sequence: 9, acknowledgedInput: 8 })
@@ -42,6 +43,7 @@ describe('Pathwarden binary gameplay protocol', () => {
             lives: 19,
             aether: 123.45,
             score: 9001,
+            relicPower: 0.4,
             paused: false,
             entityCount: 42
         })

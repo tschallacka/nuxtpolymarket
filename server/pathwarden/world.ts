@@ -99,6 +99,7 @@ export class PathwardenWorld {
             lives: Math.max(0, source.gameState?.lives ?? 20),
             aether: Math.max(0, source.gameState?.aether ?? 205),
             score: Math.max(0, source.gameState?.score ?? 0),
+            relicPower: Math.max(0, Number(source.gameState?.globalRelics?.server?.power ?? 0)),
             paused: source.gameState?.paused === true,
             entityCount: 0
         }
@@ -217,7 +218,9 @@ export class PathwardenWorld {
             selectedTower: this.selectedTower,
             towerPurchases: {},
             relicRanks: {},
-            globalRelics: {},
+            globalRelics: {
+                server: { level: Math.round(this.state.relicPower * 10), power: this.state.relicPower }
+            },
             relicInventory: [],
             ashPiles: [],
             interest: 0,
@@ -372,6 +375,9 @@ export class PathwardenWorld {
         if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
             if (!this.canApply(command)) return false
             this.state.aether += command.choice * 10
+            if (command.type === 'relic-choice') {
+                this.state.relicPower = Math.min(5, this.state.relicPower + (command.choice + 1) * 0.1)
+            }
             this.choiceKind = null
             this.choices = []
             this.state.phase = command.type === 'relic-choice' ? 'planning' : 'planning'
@@ -500,7 +506,7 @@ export class PathwardenWorld {
     }
 
     private towerDamage(type: string) {
-        return PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25
+        return (PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25) * (1 + this.state.relicPower)
     }
 
     private pathChoices() {
