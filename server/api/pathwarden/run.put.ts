@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '#server/database'
 import { pathwardenRuns, pathwardenState } from '#server/database/schema'
 import { requireUserId } from '#server/utils/auth'
+import { hasPathwardenSessionForUser } from '#server/pathwarden/session'
 import {
     PATHWARDEN_MAX_WAVE,
     pathwardenMaxWaveForElapsedMs
@@ -51,6 +52,9 @@ function validateGameState(state: PathwardenGameState) {
 
 export default defineEventHandler(async (event) => {
     const userId = await requireUserId(event)
+    if (hasPathwardenSessionForUser(userId)) {
+        throw createError({ statusCode: 409, statusMessage: 'Live Pathwarden sessions must be changed through WebSocket commands' })
+    }
     const body = await readBody<{ revision?: number, gameState?: PathwardenGameState }>(event)
     const revision = Math.floor(Number(body.revision))
     if (!Number.isInteger(revision) || revision < 0 || !body.gameState || !validateGameState(body.gameState)) {

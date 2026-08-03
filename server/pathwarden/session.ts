@@ -34,6 +34,10 @@ interface ActiveSession {
 const sessions = new Map<string, ActiveSession>()
 const MAX_COMMANDS_PER_SECOND = 120
 
+export function hasPathwardenSessionForUser(userId: string) {
+    return [...sessions.values()].some(session => session.userId === userId)
+}
+
 function send(session: ActiveSession, payload: ArrayBuffer) {
     try {
         session.peer.send(payload)
