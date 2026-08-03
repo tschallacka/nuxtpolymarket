@@ -17,7 +17,7 @@ Pathwarden live runs use one authoritative server world. The browser submits sem
 
 Gameplay packets use `shared/pathwarden/protocol.ts`. They are bounded binary packets, not JSON. Map compounds are split into 12 KiB chunks; all packets are capped at 64 KiB. Every input has a monotonically increasing sequence, and every authoritative snapshot acknowledges the latest applied sequence.
 
-The server sends a full map and entity/world snapshot on connection. Subsequent world updates are emitted at tick boundaries: entity lifecycle changes use upsert/removal deltas, map changes use monotonic claimed-room/revealed-cell deltas, one-shot gameplay effects use stable-ID event packets, and ordinary world snapshots omit repeated map arrays. A reconnect receives a fresh full snapshot and may resend only still-pending semantic commands. WebSocket ordering makes these deltas reliable within a session; reconnect always resets from the full snapshot and the renderer deduplicates replayed event IDs.
+The server sends a full map and entity/world snapshot on connection. Subsequent world updates are emitted at tick boundaries: entity lifecycle changes use upsert/removal deltas, map changes use monotonic claimed-room/revealed-cell deltas, one-shot gameplay effects use stable-ID event packets (`impact`, `enemy-defeated`, `enemy-leak`, and `wave-cleared`), and ordinary world snapshots omit repeated map arrays. A reconnect receives a fresh full snapshot and may resend only still-pending semantic commands. WebSocket ordering makes these deltas reliable within a session; reconnect always resets from the full snapshot and the renderer deduplicates replayed event IDs.
 
 ## Recovery and rollback
 
