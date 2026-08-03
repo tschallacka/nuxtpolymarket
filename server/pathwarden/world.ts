@@ -838,6 +838,9 @@ export class PathwardenWorld {
                 relicPower,
                 damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * this.boosts.damageMultiplier,
                 splash: defense.splash / 45 + relicEffects.impactRadius / 45,
+                impactDamagePct: relicEffects.impactDamagePct,
+                chainCount: relicEffects.chainCount,
+                chainRetentionPct: relicEffects.chainRetentionPct,
                 slow: Math.max(defense.slow, relicEffects.slowPct / 100),
                 burnDamage: relicEffects.burnPct > 0 ? this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * this.boosts.damageMultiplier * relicEffects.burnPct / 100 : 0,
                 burnDuration: relicEffects.burnDuration * 20,
@@ -865,9 +868,22 @@ export class PathwardenWorld {
                 const splash = Math.max(0, Number(components.splash ?? 0))
                 const affected = this.getEntities().filter(candidate => candidate.data.type === 2
                     && Math.hypot(candidate.x - target.x, candidate.y - target.y) <= splash)
-                for (const victim of affected) {
+                const damageById = new Map<number, number>()
+                const baseDamage = Number(components.damage ?? 1)
+                const impactMultiplier = 1 + Math.max(0, Number(components.impactDamagePct ?? 0)) / 100
+                for (const victim of affected) damageById.set(victim.id, baseDamage * impactMultiplier)
+                const chainCount = Math.min(5, Math.max(0, Math.floor(Number(components.chainCount ?? 0))))
+                if (chainCount > 0) {
+                    const retention = Math.max(0, Math.min(1, Number(components.chainRetentionPct ?? 0) / 100))
+                    this.getEntities()
+                        .filter(candidate => candidate.data.type === 2 && candidate.id !== target.id && !damageById.has(candidate.id))
+                        .sort((left, right) => Math.hypot(left.x - target.x, left.y - target.y) - Math.hypot(right.x - target.x, right.y - target.y))
+                        .slice(0, chainCount)
+                        .forEach((victim, index) => damageById.set(victim.id, baseDamage * Math.pow(retention, index + 1)))
+                }
+                for (const victim of this.getEntities().filter(entity => damageById.has(entity.id))) {
                     const victimComponents = victim.data.components ?? {}
-                    const hp = Number(victimComponents.hp ?? 1) - Number(components.damage ?? 1)
+                    const hp = Number(victimComponents.hp ?? 1) - damageById.get(victim.id)!
                     const slow = Math.max(Number(victimComponents.slow ?? 0), Number(components.slow ?? 0))
                     if (hp <= 0) {
                         this.removeEntity(victim.id)

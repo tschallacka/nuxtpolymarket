@@ -415,4 +415,30 @@ describe('Pathwarden authoritative world', () => {
             effects: selected.effects
         })
     })
+
+    it('applies bounded chain targets and impact damage on the authoritative projectile tick', () => {
+        vi.useFakeTimers()
+        const source = new PathwardenWorld({ runId: 'run-effects-source', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const saved = source.exportGameState()
+        saved.phase = 'wave'
+        const world = new PathwardenWorld({ runId: 'run-effects', revision: 0, realm: 1, seed: 1, mapPlan, gameState: saved })
+        const primary = world.spawnEntity({ type: 2, components: { hp: 100, progress: 1, speed: 1 } }, 1, 1)
+        const chained = world.spawnEntity({ type: 2, components: { hp: 100, progress: 0.9, speed: 1 } }, 2, 1)
+        const untouched = world.spawnEntity({ type: 2, components: { hp: 100, progress: 0.8, speed: 1 } }, 3, 1)
+        world.spawnEntity({ type: 3, components: {
+            targetId: primary,
+            damage: 20,
+            splash: 0,
+            impactDamagePct: 50,
+            chainCount: 1,
+            chainRetentionPct: 50,
+            progress: 0
+        } }, 0, 1)
+        const simulateProjectiles = (world as unknown as { simulateProjectiles: () => void }).simulateProjectiles
+        for (let index = 0; index < 4; index++) simulateProjectiles.call(world)
+
+        expect(world.getEntities().find(entity => entity.id === primary)?.data.components?.hp).toBe(70)
+        expect(world.getEntities().find(entity => entity.id === chained)?.data.components?.hp).toBe(90)
+        expect(world.getEntities().find(entity => entity.id === untouched)?.data.components?.hp).toBe(100)
+    })
 })
