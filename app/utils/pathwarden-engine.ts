@@ -1322,6 +1322,20 @@ export class PathwardenEngine {
         arcHeight: 0
       }
     })
+    this.ambientActors = entities.filter(entity => entity.type === 4).map(entity => {
+      const components = entity.components ?? {}
+      const duration = Number(components.duration ?? 120)
+      return {
+        id: entity.id,
+        storyId: Number(components.storyId ?? 1),
+        blockKey: `${Math.round(entity.x)}:${Math.round(entity.y)}`,
+        kind: 'market' as const,
+        age: Number(components.progress ?? 0) * duration,
+        duration,
+        seed: Number(components.storyId ?? 1) * 13.71,
+        countsForProgress: false
+      }
+    })
     this.emitState()
   }
 
@@ -2987,25 +3001,27 @@ export class PathwardenEngine {
     }
     this.streakTimer -= delta
     if (this.streakTimer <= 0) this.streak = 0
-    if (this.ambientEvacuation > 0) {
+    if (!this.serverAuthoritative && this.ambientEvacuation > 0) {
       this.ambientEvacuation = Math.max(0, this.ambientEvacuation - delta)
       if (this.ambientEvacuation <= 0) {
         this.ambientActors = []
         if (this.pendingWaveStart) this.beginWave()
       }
-    } else if (this.phase === 'planning' && !this.towerDrag) {
+    } else if (!this.serverAuthoritative && this.phase === 'planning' && !this.towerDrag) {
       this.idleTime += delta
       this.ambientSpawnTimer -= delta
       if (this.idleTime >= 20 && this.ambientSpawnTimer <= 0 && this.ambientActors.length < 4) this.spawnAmbientActor()
     } else {
       this.idleTime = 0
     }
-    for (const actor of [...this.ambientActors]) {
-      if (!this.pendingWaveStart) actor.age += delta
-      if (actor.age >= actor.duration) {
-        this.ambientActors.splice(this.ambientActors.indexOf(actor), 1)
-        if (actor.countsForProgress) this.callbacks.onAmbientStoryComplete?.(actor.storyId)
-        this.ambientSpawnTimer = Math.max(this.ambientSpawnTimer, 35 + Math.random() * 90)
+    if (!this.serverAuthoritative) {
+      for (const actor of [...this.ambientActors]) {
+        if (!this.pendingWaveStart) actor.age += delta
+        if (actor.age >= actor.duration) {
+          this.ambientActors.splice(this.ambientActors.indexOf(actor), 1)
+          if (actor.countsForProgress) this.callbacks.onAmbientStoryComplete?.(actor.storyId)
+          this.ambientSpawnTimer = Math.max(this.ambientSpawnTimer, 35 + Math.random() * 90)
+        }
       }
     }
 

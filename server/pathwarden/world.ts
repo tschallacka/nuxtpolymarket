@@ -59,6 +59,8 @@ export class PathwardenWorld {
     private selectedTower = 'bolt'
     private spawnRemaining = 0
     private spawnCooldown = 0
+    private ambientCooldown = 80
+    private nextAmbientStoryId = 1
     private choiceKind: 'checkpoint' | 'relic' | 'path' | null = null
     private choices: number[] = []
     private batching = false
@@ -280,6 +282,7 @@ export class PathwardenWorld {
             changed = this.apply(queued.command) || changed
         }
         this.simulateWave()
+        this.simulateAmbient()
         this.batching = false
         if (changed || this.dirty || this.state.tick % 10 === 0) this.notifyChange()
         else this.dirty = false
@@ -502,6 +505,31 @@ export class PathwardenWorld {
             } else {
                 this.updateEntity(projectile.id, { x: nextX, y: nextY, data: { type: 3, components: { ...components, progress } } })
             }
+        }
+    }
+
+    private simulateAmbient() {
+        if (this.state.phase !== 'planning' || this.state.paused) return
+        const ambient = this.getEntities().find(entity => entity.data.type === 4)
+        if (!ambient) {
+            this.ambientCooldown--
+            if (this.ambientCooldown > 0) return
+            const road = this.mapPlan.rooms.find(room => this.claimedRooms.has(room.id))?.roadCells[0] ?? { col: 0, row: 0 }
+            this.spawnEntity({
+                type: 4,
+                components: { storyId: this.nextAmbientStoryId++, progress: 0, duration: 120, kind: 'market' }
+            }, road.col, road.row)
+            this.ambientCooldown = 260
+            return
+        }
+        const components = ambient.data.components ?? {}
+        const progress = Number(components.progress ?? 0) + 1 / Number(components.duration ?? 120)
+        if (progress >= 1) {
+            this.removeEntity(ambient.id)
+            this.state.aether += 5
+            this.state.score += 5
+        } else {
+            this.updateEntity(ambient.id, { data: { type: 4, components: { ...components, progress } } })
         }
     }
 
