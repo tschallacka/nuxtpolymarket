@@ -10,6 +10,12 @@ export interface PathwardenReplayRecord {
     stateHash: string
 }
 
+export interface PathwardenReplayMismatch {
+    index: number
+    expected: PathwardenReplayRecord | undefined
+    actual: PathwardenReplayRecord | undefined
+}
+
 const MAX_RECORDS_PER_RUN = 512
 const records = new Map<string, PathwardenReplayRecord[]>()
 
@@ -35,6 +41,16 @@ export function recordPathwardenReplay(runId: string, record: PathwardenReplayRe
 
 export function getPathwardenReplay(runId: string) {
     return [...(records.get(runId) ?? [])]
+}
+
+export function comparePathwardenReplay(expected: PathwardenReplayRecord[], actual: PathwardenReplayRecord[], limit = 32) {
+    const mismatches: PathwardenReplayMismatch[] = []
+    const length = Math.max(expected.length, actual.length)
+    for (let index = 0; index < length && mismatches.length < limit; index++) {
+        if (JSON.stringify(expected[index]) === JSON.stringify(actual[index])) continue
+        mismatches.push({ index, expected: expected[index], actual: actual[index] })
+    }
+    return { equal: mismatches.length === 0 && expected.length === actual.length, mismatches }
 }
 
 export function clearPathwardenReplay(runId: string) {

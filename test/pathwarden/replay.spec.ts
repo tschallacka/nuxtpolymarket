@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hashPathwardenState, recordPathwardenReplay, getPathwardenReplay, clearPathwardenReplay } from '#server/pathwarden/replay'
+import { comparePathwardenReplay, hashPathwardenState, recordPathwardenReplay, getPathwardenReplay, clearPathwardenReplay } from '#server/pathwarden/replay'
 
 describe('Pathwarden replay diagnostics', () => {
     it('records bounded semantic command history and returns stable hashes', () => {
@@ -53,5 +53,18 @@ describe('Pathwarden replay diagnostics', () => {
             stateHash: 'deadbeef'
         }])
         clearPathwardenReplay(runId)
+    })
+
+    it('reports the first bounded replay divergence', () => {
+        const expected = [{ tick: 1, stateHash: 'a' }]
+        const actual = [{ tick: 1, stateHash: 'b' }, { tick: 2, stateHash: 'c' }]
+        expect(comparePathwardenReplay(expected, actual)).toEqual({
+            equal: false,
+            mismatches: [
+                { index: 0, expected: expected[0], actual: actual[0] },
+                { index: 1, expected: undefined, actual: actual[1] }
+            ]
+        })
+        expect(comparePathwardenReplay(expected, expected)).toEqual({ equal: true, mismatches: [] })
     })
 })
