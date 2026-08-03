@@ -141,6 +141,25 @@ describe('Pathwarden authoritative world', () => {
         expect(world.canApply({ type: 'salvage-tower', id: tower.id })).toBe(true)
     })
 
+    it('revalidates commands after earlier commands in the same tick mutate state', () => {
+        vi.useFakeTimers()
+        const source = new PathwardenWorld({ runId: 'run-6b-source', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        source.spawnEntity({ type: 1, components: { towerType: 'bolt', col: 10, row: 10, invested: 75, level: 1, targeting: 'first' } }, 10, 10, 0, 0, 0, 0, 1)
+        const saved = source.exportGameState()
+        saved.aether = 55
+        const world = new PathwardenWorld({ runId: 'run-6b', revision: 0, realm: 1, seed: 1, mapPlan, gameState: saved })
+        const tower = world.getEntities().find(entity => entity.data.type === 1)!
+        world.enqueue(2, { type: 'upgrade-tower', id: tower.id })
+        world.enqueue(3, { type: 'upgrade-tower', id: tower.id })
+        world.start()
+        vi.advanceTimersByTime(50)
+        world.stop()
+
+        expect(world.getEntities().find(entity => entity.id === tower.id)?.data.components?.level).toBe(2)
+        expect(world.getSnapshot().aether).toBeGreaterThanOrEqual(0)
+        expect(world.lastAppliedInput).toBe(3)
+    })
+
     it('keeps relic inventory and binding on the server entity graph', () => {
         vi.useFakeTimers()
         const world = new PathwardenWorld({ runId: 'run-7', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })

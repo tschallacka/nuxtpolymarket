@@ -389,6 +389,7 @@ export class PathwardenWorld {
         for (const queued of commands) {
             if (queued.inputSequence <= this.lastInputSequence) continue
             this.lastInputSequence = queued.inputSequence
+            if (!this.canApply(queued.command)) continue
             changed = this.apply(queued.command) || changed
         }
         this.simulateWave()
