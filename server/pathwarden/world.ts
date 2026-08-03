@@ -171,6 +171,8 @@ export class PathwardenWorld {
                 progress: projectile.age,
                 splash: projectile.splash,
                 slow: projectile.slow,
+                burnDamage: projectile.burnDamage ?? 0,
+                burnDuration: projectile.burnDuration ?? 0,
                 speed: projectile.speed,
                 duration: projectile.duration
             } }, projectile.x, projectile.y, 0, 0, 0, 0, projectile.id)
@@ -368,6 +370,8 @@ export class PathwardenWorld {
                 splash: Number(entity.data.components?.splash ?? 0),
                 splashFactor: 0,
                 slow: Number(entity.data.components?.slow ?? 0),
+                burnDamage: Number(entity.data.components?.burnDamage ?? 0),
+                burnDuration: Number(entity.data.components?.burnDuration ?? 0),
                 color: 'primary',
                 size: 4,
                 trail: [],
@@ -580,6 +584,15 @@ export class PathwardenWorld {
         const enemies = this.getEntities().filter(entity => entity.data.type === 2)
         for (const enemy of enemies) {
             const components = enemy.data.components ?? {}
+            const dotTimer = Math.max(0, Number(components.dotTimer ?? 0) - 1)
+            const dotDamage = Math.max(0, Number(components.dotDamage ?? 0))
+            const dotHp = Number(components.hp ?? 1) - (dotTimer > 0 ? dotDamage : 0)
+            if (dotTimer > 0 && dotHp <= 0) {
+                this.removeEntity(enemy.id)
+                this.state.score += 10
+                this.state.aether += Math.max(0, Number(components.reward ?? 0))
+                continue
+            }
             const slowTimer = Math.max(0, Number(components.slowTimer ?? 0) - 1)
             const slow = slowTimer > 0 ? Math.max(0, Number(components.slow ?? 0)) : 0
             const enemyType = String(components.enemyType ?? 'raider')
@@ -606,7 +619,7 @@ export class PathwardenWorld {
                 continue
             }
             const position = this.routePosition(progress)
-            this.updateEntity(enemy.id, { x: position.col, y: position.row, data: { type: 2, components: { ...components, progress, slow, slowTimer, healTimer: enemyType === 'shaman' && healTimer === 0 ? 44 : healTimer } } })
+            this.updateEntity(enemy.id, { x: position.col, y: position.row, data: { type: 2, components: { ...components, hp: dotHp, dotTimer, progress, slow, slowTimer, healTimer: enemyType === 'shaman' && healTimer === 0 ? 44 : healTimer } } })
         }
         this.simulateTowers()
         this.simulateProjectiles()
@@ -685,14 +698,21 @@ export class PathwardenWorld {
                 : targeting === 'fast'
                     ? Number(right.data.components?.speed ?? 1) - Number(left.data.components?.speed ?? 1)
                     : Number(right.data.components?.progress ?? 0) - Number(left.data.components?.progress ?? 0))[0]!
-            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: Math.max(1, Math.round(defense.rate * 20)) } } })
+            const relicFamily = String(components.relicFamily ?? '')
+            const relicPower = Number(components.relicPower ?? 0)
+            const relicEffects = this.relicEffects(relicFamily, relicPower)
+            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: Math.max(1, Math.round(defense.rate * 20 / (1 + relicEffects.attackSpeedPct / 100))) } } })
             this.spawnEntity({ type: 3, components: {
                 towerType: String(components.towerType ?? 'bolt'),
                 sourceId: tower.id,
                 targetId: target.id,
-                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), Number(components.relicPower ?? 0)),
-                splash: defense.splash / 45,
-                slow: defense.slow,
+                relicFamily,
+                relicPower,
+                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily),
+                splash: defense.splash / 45 + relicEffects.impactRadius / 45,
+                slow: Math.max(defense.slow, relicEffects.slowPct / 100),
+                burnDamage: relicEffects.burnPct > 0 ? this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * relicEffects.burnPct / 100 : 0,
+                burnDuration: relicEffects.burnDuration * 20,
                 progress: 0
             } }, tower.x, tower.y, 0, target.x, target.y)
         }
@@ -722,12 +742,15 @@ export class PathwardenWorld {
                     if (hp <= 0) {
                         this.removeEntity(victim.id)
                         this.state.score += 10
+                        this.state.aether += Math.max(0, Number(victimComponents.reward ?? 0))
                     } else {
                         this.updateEntity(victim.id, { data: { type: 2, components: {
                             ...victimComponents,
                             hp,
                             slow,
-                            slowTimer: slow > 0 ? 24 : Number(victimComponents.slowTimer ?? 0)
+                            slowTimer: slow > 0 ? 24 : Number(victimComponents.slowTimer ?? 0),
+                            dotDamage: Math.max(Number(victimComponents.dotDamage ?? 0), Number(components.burnDamage ?? 0)),
+                            dotTimer: Math.max(Number(victimComponents.dotTimer ?? 0), Number(components.burnDuration ?? 0))
                         } } })
                     }
                 }
@@ -778,10 +801,23 @@ export class PathwardenWorld {
         }
     }
 
-    private towerDamage(type: string, level: number, relicPower = 0) {
+    private relicEffects(family: string, power: number) {
+        const directDamagePct: Record<string, number> = { fire: 6, frost: 4, storm: 3, venom: 3, blast: 6, leech: 4, pierce: 10, chain: 2, gale: 2, radiant: 4 }
+        return {
+            directDamagePct: (directDamagePct[family] ?? 0) * power,
+            burnPct: family === 'fire' ? 18 * power : family === 'venom' ? 24 * power : 0,
+            burnDuration: family === 'fire' ? 3 : family === 'venom' ? 4 : 0,
+            slowPct: family === 'frost' ? 22 + 4 * power : 0,
+            impactRadius: family === 'blast' ? 46 + power * 8 : family === 'radiant' ? 52 + power * 7 : 0,
+            attackSpeedPct: family === 'gale' ? 7 * power : family === 'haste' ? 8 * power : 0
+        }
+    }
+
+    private towerDamage(type: string, level: number, relicPower = 0, relicFamily = '') {
         const base = PATHWARDEN_DEFENSE_BLUEPRINTS.find(defense => defense.id === type)?.damage ?? 25
         const levelPower = level >= 3 ? 3.35 : level >= 2 ? 1.85 : 1
-        return base * levelPower * (1 + this.state.relicPower + Math.max(0, relicPower))
+        const effects = this.relicEffects(relicFamily, relicPower)
+        return base * levelPower * (1 + this.state.relicPower + Math.max(0, relicPower) + effects.directDamagePct / 100)
     }
 
     private spawnRelic(relic: PathwardenSavedRelic) {

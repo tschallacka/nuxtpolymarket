@@ -181,6 +181,8 @@ export interface PathwardenSavedProjectile {
     splash: number
     splashFactor: number
     slow: number
+    burnDamage?: number
+    burnDuration?: number
     color: string
     size: number
     trail: PathwardenGridPoint[]
