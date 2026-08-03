@@ -74,8 +74,10 @@ export function usePathwardenRealtime() {
                 if (wasDifferent) corrections.value += 1
                 if (snapshot.value) {
                     const tickGap = next.tick - snapshot.value.tick
-                    if (tickGap < 0) staleSnapshots.value += 1
-                    else maxTickGap.value = Math.max(maxTickGap.value, tickGap)
+                    if (tickGap < 0) {
+                        staleSnapshots.value += 1
+                        return
+                    } else maxTickGap.value = Math.max(maxTickGap.value, tickGap)
                 }
                 snapshot.value = next
                 const expectedChoiceKind = next.phase === 'checkpoint'
