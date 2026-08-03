@@ -1062,6 +1062,12 @@ export class PathwardenEngine {
 
   setPaused(paused: boolean) {
     if (this.phase === 'defeat' || this.phase === 'victory' || this.phase === 'cashout' || this.paused === paused) return
+    if (this.serverAuthoritative) {
+      this.callbacks.onCommand?.({ type: 'pause', value: paused })
+      this.message = paused ? 'Pause command sent to the Warden.' : 'Resume command sent to the Warden.'
+      this.emitState()
+      return
+    }
     this.paused = paused
     this.noteActivity()
     this.message = paused ? 'Time is held by the Warden.' : 'The horde moves once more.'
@@ -1420,6 +1426,12 @@ export class PathwardenEngine {
 
   continueCheckpoint() {
     if (this.phase !== 'checkpoint') return
+    if (this.serverAuthoritative) {
+      this.callbacks.onCommand?.({ type: 'continue-checkpoint' })
+      this.message = 'Checkpoint command sent to the Warden.'
+      this.emitState()
+      return
+    }
     this.noteActivity()
     if (this.wave >= 12) {
       this.phase = 'victory'
@@ -2328,6 +2340,12 @@ export class PathwardenEngine {
     if (!this.canSellRelics || this.phase === 'wave' || this.phase === 'checkpoint') return
     const relic = this.relicInventory.find(candidate => candidate.instanceId === instanceId)
     if (!relic) return
+    if (this.serverAuthoritative) {
+      this.callbacks.onCommand?.({ type: 'sell-relic', instanceId })
+      this.message = 'Relic sale command sent to the Warden.'
+      this.emitState()
+      return
+    }
     this.relicInventory.splice(this.relicInventory.indexOf(relic), 1)
     this.aether += relic.sellValue
     this.message = `${relic.name} dissolved · ${relic.sellValue} Aether recovered.`
