@@ -362,6 +362,20 @@ describe('Pathwarden authoritative world', () => {
         expect(ambient!.data.components).toMatchObject({ family: 'Market day', kind: 'market', variant: 1 })
     })
 
+    it('restores an in-progress ambient actor after world reconstruction', () => {
+        vi.useFakeTimers()
+        const source = new PathwardenWorld({ runId: 'run-12b', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        source.start()
+        vi.advanceTimersByTime(50 * 902)
+        const saved = source.exportGameState()
+        source.stop()
+
+        const restored = new PathwardenWorld({ runId: 'run-12b', revision: 1, realm: 1, seed: 1, mapPlan, gameState: saved })
+        const ambient = restored.getEntities().find(entity => entity.data.type === 4)
+        expect(ambient?.data.components).toMatchObject({ storyId: 1, family: 'Market day', kind: 'market', variant: 1 })
+        expect(Number(ambient?.data.components?.progress)).toBeCloseTo(Number(saved.ambientActor?.progress ?? 0))
+    })
+
     it('rejects stale choice offer revisions', () => {
         const source = new PathwardenWorld({ runId: 'run-13', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
         const saved = source.exportGameState()

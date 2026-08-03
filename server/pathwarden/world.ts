@@ -160,7 +160,8 @@ export class PathwardenWorld {
         this.flawlessWaves = this.state.flawlessWaves
         this.spawnRemaining = Math.max(0, Math.floor(source.gameState?.spawnLeft ?? 0))
         this.spawnCooldown = Math.max(0, Math.floor(source.gameState?.spawnTimer ?? 0))
-        this.ambientCooldown = 900 + (source.seed % 4501)
+        this.ambientCooldown = Math.max(0, Math.floor(source.gameState?.ambientCooldown ?? (900 + (source.seed % 4501))))
+        this.nextAmbientStoryId = Math.max(1, Math.min(250, Math.floor(source.gameState?.nextAmbientStoryId ?? 1)))
         if (this.state.phase === 'checkpoint') {
             this.choiceKind = 'checkpoint'
             this.choices = [0, 1, 2]
@@ -211,6 +212,15 @@ export class PathwardenWorld {
             } }, projectile.x, projectile.y, 0, 0, 0, 0, projectile.id)
         }
         for (const relic of source.gameState?.relicInventory ?? []) this.spawnRelic(relic)
+        const savedAmbient = source.gameState?.ambientActor
+        if (savedAmbient && Number.isFinite(savedAmbient.storyId)) this.spawnEntity({ type: 4, components: {
+            storyId: Math.max(1, Math.min(250, Math.floor(savedAmbient.storyId))),
+            progress: Math.max(0, Math.min(1, Number(savedAmbient.progress) || 0)),
+            duration: Math.max(1, Math.floor(Number(savedAmbient.duration) || 1800)),
+            family: String(savedAmbient.family ?? 'Market day'),
+            kind: String(savedAmbient.kind ?? 'market'),
+            variant: Math.max(1, Math.min(10, Math.floor(Number(savedAmbient.variant) || 1)))
+        } }, Number(savedAmbient.col) || 0, Number(savedAmbient.row) || 0)
     }
 
     setChangeHandler(handler: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[], events: PathwardenGameplayEvent[]) => void) {
@@ -334,6 +344,8 @@ export class PathwardenWorld {
 
     exportGameState(): PathwardenGameState {
         const entities = this.getEntities()
+        const ambient = entities.find(entity => entity.data.type === 4)
+        const ambientComponents = ambient?.data.components
         return {
             phase: this.state.phase,
             paused: this.state.paused,
@@ -422,7 +434,19 @@ export class PathwardenWorld {
             towerId: this.nextEntityId,
             enemyId: this.nextEntityId,
             relicInstanceId: this.nextRelicInstanceId,
-            lastInputSequence: this.lastInputSequence
+            lastInputSequence: this.lastInputSequence,
+            ambientActor: ambient && ambientComponents ? {
+                storyId: Number(ambientComponents.storyId ?? 1),
+                progress: Number(ambientComponents.progress ?? 0),
+                duration: Number(ambientComponents.duration ?? 1800),
+                family: String(ambientComponents.family ?? 'Market day'),
+                kind: String(ambientComponents.kind ?? 'market'),
+                variant: Number(ambientComponents.variant ?? 1),
+                col: ambient.x,
+                row: ambient.y
+            } : undefined,
+            ambientCooldown: this.ambientCooldown,
+            nextAmbientStoryId: this.nextAmbientStoryId
         }
     }
 

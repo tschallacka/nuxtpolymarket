@@ -240,6 +240,17 @@ export interface PathwardenSavedAshPile {
     flakesGenerated: number
 }
 
+export interface PathwardenSavedAmbientActor {
+    storyId: number
+    progress: number
+    duration: number
+    family: string
+    kind: string
+    variant: number
+    col: number
+    row: number
+}
+
 export interface PathwardenGameState {
     phase: string
     paused: boolean
@@ -272,6 +283,9 @@ export interface PathwardenGameState {
     enemyId: number
     relicInstanceId: number
     lastInputSequence?: number
+    ambientActor?: PathwardenSavedAmbientActor
+    ambientCooldown?: number
+    nextAmbientStoryId?: number
 }
 
 export interface PathwardenRunSave {
