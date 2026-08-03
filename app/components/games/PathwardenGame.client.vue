@@ -387,12 +387,7 @@ const savingSkipIntro = ref(false)
 const savingKeyboardPan = ref(false)
 let engine: PathwardenEngine | null = null
 let unregisterDevBridge = () => {}
-const SAVE_DEBOUNCE_MS = 2500
 let cooldownClock: ReturnType<typeof setInterval> | null = null
-let saveTimer: ReturnType<typeof setTimeout> | null = null
-let saveRevision = 0
-let saveDirty = false
-let activeSave: Promise<void> | null = null
 let restoredRun: { mapPlan: PathwardenMapPlan, gameState: PathwardenGameState } | undefined
 
 const towerTypes = computed(() => (boostState.value?.defenses
@@ -513,20 +508,14 @@ function chooseInventoryDefense(type: PathwardenTowerType) {
 }
 
 function sellRelic(instanceId: number) {
-  if (activeRunId.value) {
-    realtime.send({ type: 'sell-relic', instanceId })
-    return
-  }
-  engine?.sellRelic(instanceId)
+  if (!activeRunId.value) return
+  realtime.send({ type: 'sell-relic', instanceId })
 }
 
 function togglePause() {
   const nextPaused = !snapshot.value.paused
-  if (activeRunId.value) {
-    realtime.send({ type: 'pause', value: nextPaused })
-    return
-  }
-  engine?.setPaused(nextPaused)
+  if (!activeRunId.value) return
+  realtime.send({ type: 'pause', value: nextPaused })
 }
 
 function toggleRoadLaboratory() {
@@ -563,11 +552,6 @@ async function clearDebugCache() {
     activeRunId.value = null
     realtime.close()
     restoredRun = undefined
-    saveRevision = 0
-    saveDirty = false
-    activeSave = null
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = null
     localStorage.removeItem('pathwarden-hints')
     hintsEnabled.value = true
     await refreshBoosts()
@@ -628,7 +612,6 @@ function claimCheckpointReward(wave: number) {
 
   const request = (async () => {
     try {
-      await flushSave()
       const result = await $fetch('/api/pathwarden/checkpoint', {
         method: 'POST',
         body: { wave }
@@ -699,8 +682,6 @@ async function ensureRunStarted() {
     activeRunId.value = response.run.id
     engine?.setServerAuthoritative()
     realtime.connect(response.run.id)
-    saveRevision = 0
-    scheduleSave()
     await refreshBoosts()
     return true
   } catch (error: unknown) {
@@ -778,9 +759,6 @@ async function abandonRun(currency: 'gems' | 'coins') {
     runActive.value = false
     activeRunId.value = null
     realtime.close()
-    saveDirty = false
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = null
     abandonOpen.value = false
     await Promise.all([refreshBoosts(), fetchSession()])
     restart()
@@ -954,7 +932,6 @@ async function settleRun(reason: 'cashout' | 'victory' | 'defeat') {
   try {
     // The server settles from the persisted save, so make sure the final state
     // has landed before finishing — the request body only carries the reason.
-    await flushSave()
     const response = await $fetch('/api/pathwarden/finish-run', {
       method: 'POST',
       body: { reason }
@@ -994,52 +971,8 @@ async function cashOut() {
 
 async function continueCheckpoint() {
   await claimCheckpointReward(snapshot.value.wave)
-  if (activeRunId.value) {
-    realtime.send({ type: 'continue-checkpoint' })
-    return
-  }
-  engine?.continueCheckpoint()
-}
-
-function scheduleSave() {
-  if (!runActive.value || !engine || activeRunId.value) return
-  saveDirty = true
-  if (saveTimer) return
-  saveTimer = setTimeout(() => {
-    saveTimer = null
-    void flushSave()
-  }, SAVE_DEBOUNCE_MS)
-}
-
-async function persistSave(): Promise<void> {
-  if (!runActive.value || !engine || !saveDirty || activeRunId.value) return
-  saveDirty = false
-  const gameState = engine.exportGameState()
-  try {
-    const saved = await $fetch('/api/pathwarden/run', {
-      method: 'PUT',
-      body: { revision: saveRevision, gameState }
-    })
-    saveRevision = saved.revision
-  } catch (error: unknown) {
-    saveDirty = true
-    if ((error as { statusCode?: number }).statusCode === 409) {
-      toast.add({
-        title: 'March opened elsewhere',
-        description: 'This tab stopped saving to protect the newer Pathwarden state.',
-        color: 'warning'
-      })
-      runActive.value = false
-    }
-  }
-}
-
-// Serializes writes onto a single chain, so awaiting a flush always waits for
-// the latest state to reach the server. A checkpoint claim or settlement can
-// depend on the save it just triggered actually landing first.
-function flushSave(): Promise<void> {
-  activeSave = (activeSave ?? Promise.resolve()).catch(() => {}).then(persistSave)
-  return activeSave
+  if (!activeRunId.value) return
+  realtime.send({ type: 'continue-checkpoint' })
 }
 
 function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
@@ -1047,7 +980,6 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
   engine = new PathwardenEngine(canvas.value, {
     onState: (state) => {
       snapshot.value = state
-      scheduleSave()
     },
     onUpgrade: choices => { upgradeChoices.value = choices },
     onOpenBuildingInventory: openBuildingInventory,
@@ -1124,7 +1056,6 @@ onMounted(async () => {
     if (response.run?.gameState) {
       runActive.value = true
       activeRunId.value = response.run.id
-      saveRevision = response.run.revision
       selectedRealm.value = response.run.realm
       restoredRun = {
         mapPlan: response.run.mapPlan,
@@ -1201,10 +1132,8 @@ watch(realtime.choiceOffer, offer => {
 
 onBeforeUnmount(() => {
   if (cooldownClock) clearInterval(cooldownClock)
-  if (saveTimer) clearTimeout(saveTimer)
   unregisterDevBridge()
   realtime.close()
-  void flushSave()
   engine?.destroy()
 })
 
