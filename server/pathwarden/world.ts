@@ -437,6 +437,12 @@ export class PathwardenWorld {
         this.simulateAmbient()
         this.batching = false
         const stateHash = hashPathwardenState(this.getSnapshot(), this.getEntities())
+        const tickEvents = this.events.map(event => ({ id: event.id, type: event.type }))
+        recordPathwardenReplay(this.runId, {
+            tick: this.state.tick,
+            events: tickEvents,
+            stateHash
+        })
         for (const replayCommand of replayCommands) recordPathwardenReplay(this.runId, {
             tick: this.state.tick,
             ...replayCommand,

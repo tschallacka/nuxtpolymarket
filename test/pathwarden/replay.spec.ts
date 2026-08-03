@@ -37,4 +37,21 @@ describe('Pathwarden replay diagnostics', () => {
         clearPathwardenReplay(runId)
         expect(getPathwardenReplay(runId)).toEqual([])
     })
+
+    it('keeps authoritative event metadata alongside the tick hash', () => {
+        const runId = 'replay-events-test'
+        clearPathwardenReplay(runId)
+        recordPathwardenReplay(runId, {
+            tick: 12,
+            events: [{ id: 7, type: 1 }, { id: 8, type: 2 }],
+            stateHash: 'deadbeef'
+        })
+
+        expect(getPathwardenReplay(runId)).toEqual([{
+            tick: 12,
+            events: [{ id: 7, type: 1 }, { id: 8, type: 2 }],
+            stateHash: 'deadbeef'
+        }])
+        clearPathwardenReplay(runId)
+    })
 })

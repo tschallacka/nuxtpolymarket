@@ -6,6 +6,7 @@ export interface PathwardenReplayRecord {
     inputSequence?: number
     command?: PathwardenInputCommand
     accepted?: boolean
+    events?: Array<{ id: number, type: number }>
     stateHash: string
 }
 
