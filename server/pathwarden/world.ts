@@ -16,6 +16,17 @@ export interface PathwardenWorldSource {
     seed: number
     mapPlan: PathwardenMapPlan
     gameState: PathwardenGameState | null
+    boosts?: PathwardenWorldBoosts
+}
+
+export interface PathwardenWorldBoosts {
+    startingLives: number
+    startingAether: number
+    damageMultiplier: number
+    rangeMultiplier: number
+    rateMultiplier: number
+    bountyMultiplier: number
+    arcanistLevel: number
 }
 
 export interface PathwardenEntityData {
@@ -52,6 +63,7 @@ export class PathwardenWorld {
     private readonly commands: QueuedCommand[] = []
     private readonly entities = new Map<number, PathwardenEntity>()
     private readonly mapPlan: PathwardenMapPlan
+    private readonly boosts: PathwardenWorldBoosts
     private readonly runId: string
     private readonly claimedRooms = new Set<string>()
     private readonly revealed = new Set<string>()
@@ -84,6 +96,15 @@ export class PathwardenWorld {
     constructor(source: PathwardenWorldSource) {
         this.runId = source.runId
         this.mapPlan = source.mapPlan
+        this.boosts = source.boosts ?? {
+            startingLives: 20,
+            startingAether: 205,
+            damageMultiplier: 1,
+            rangeMultiplier: 1,
+            rateMultiplier: 1,
+            bountyMultiplier: 1,
+            arcanistLevel: 0
+        }
         const claimed = new Set(source.gameState?.claimedRoomIds ?? [])
         this.claimedRooms.add(this.mapPlan.castleRoomId)
         for (const roomId of claimed) this.claimedRooms.add(roomId)
@@ -113,8 +134,8 @@ export class PathwardenWorld {
             tick: 0,
             phase: initialPhase(source.gameState),
             wave: Math.max(0, source.gameState?.wave ?? 0),
-            lives: Math.max(0, source.gameState?.lives ?? 20),
-            aether: Math.max(0, source.gameState?.aether ?? 205),
+            lives: Math.max(0, source.gameState?.lives ?? this.boosts.startingLives),
+            aether: Math.max(0, source.gameState?.aether ?? this.boosts.startingAether),
             score: Math.max(0, source.gameState?.score ?? 0),
             streak: Math.max(0, source.gameState?.streak ?? 0),
             flawlessWaves: Math.max(0, source.gameState?.flawlessWaves ?? 0),
@@ -684,7 +705,7 @@ export class PathwardenWorld {
                 progress: 0,
                 hp,
                 maxHp: hp,
-                reward: (2 + this.state.wave) * profile.reward,
+                reward: (2 + this.state.wave) * profile.reward * this.boosts.bountyMultiplier,
                 speed: profile.speed,
                 leakDamage: profile.leakDamage,
                 healTimer: 44
@@ -704,7 +725,7 @@ export class PathwardenWorld {
                 this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: cooldown - 1 } } })
                 continue
             }
-            const range = Math.max(2, defense.range / 45)
+            const range = Math.max(2, defense.range / 45 * this.boosts.rangeMultiplier)
             const inRange = enemies.filter(enemy => Math.hypot(enemy.x - tower.x, enemy.y - tower.y) <= range)
             if (!inRange.length) continue
             const targeting = String(components.targeting ?? 'first')
@@ -716,17 +737,17 @@ export class PathwardenWorld {
             const relicFamily = String(components.relicFamily ?? '')
             const relicPower = Number(components.relicPower ?? 0)
             const relicEffects = this.relicEffects(relicFamily, relicPower)
-            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: Math.max(1, Math.round(defense.rate * 20 / (1 + relicEffects.attackSpeedPct / 100))) } } })
+            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: Math.max(1, Math.round(defense.rate * 20 / (this.boosts.rateMultiplier * (1 + relicEffects.attackSpeedPct / 100)))) } } })
             this.spawnEntity({ type: 3, components: {
                 towerType: String(components.towerType ?? 'bolt'),
                 sourceId: tower.id,
                 targetId: target.id,
                 relicFamily,
                 relicPower,
-                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily),
+                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * this.boosts.damageMultiplier,
                 splash: defense.splash / 45 + relicEffects.impactRadius / 45,
                 slow: Math.max(defense.slow, relicEffects.slowPct / 100),
-                burnDamage: relicEffects.burnPct > 0 ? this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * relicEffects.burnPct / 100 : 0,
+                burnDamage: relicEffects.burnPct > 0 ? this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * this.boosts.damageMultiplier * relicEffects.burnPct / 100 : 0,
                 burnDuration: relicEffects.burnDuration * 20,
                 progress: 0
             } }, tower.x, tower.y, 0, target.x, target.y)

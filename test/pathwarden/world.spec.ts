@@ -80,6 +80,27 @@ describe('Pathwarden authoritative world', () => {
         expect(world.lastAppliedInput).toBe(4)
     })
 
+    it('locks permanent boost effects into a fresh authoritative world', () => {
+        const world = new PathwardenWorld({
+            runId: 'run-boosts',
+            revision: 0,
+            realm: 1,
+            seed: 1,
+            mapPlan,
+            gameState: null,
+            boosts: {
+                startingLives: 24,
+                startingAether: 260,
+                damageMultiplier: 1.3,
+                rangeMultiplier: 1.2,
+                rateMultiplier: 1.1,
+                bountyMultiplier: 1.25,
+                arcanistLevel: 2
+            }
+        })
+        expect(world.getSnapshot()).toMatchObject({ lives: 24, aether: 260 })
+    })
+
     it('rejects commands outside the current phase before queueing them', () => {
         const world = new PathwardenWorld({ runId: 'run-3', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
         expect(world.canApply({ type: 'place-tower', col: 1, row: 1 })).toBe(false)

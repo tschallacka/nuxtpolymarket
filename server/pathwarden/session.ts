@@ -1,9 +1,10 @@
 import type { Peer } from 'crossws'
 import { and, eq, sql } from 'drizzle-orm'
 import { db } from '#server/database'
-import { pathwardenRuns } from '#server/database/schema'
+import { pathwardenRuns, pathwardenState } from '#server/database/schema'
 import { auth } from '#server/utils/auth'
-import { recordPathwardenAmbientStory } from '#server/utils/pathwarden'
+import { pathwardenLevels, recordPathwardenAmbientStory } from '#server/utils/pathwarden'
+import { pathwardenBoostEffects } from '#shared/utils/gamelogic/pathwarden'
 import { PathwardenWorld } from '#server/pathwarden/world'
 import type { PathwardenEntity } from '#server/pathwarden/world'
 import {
@@ -90,13 +91,19 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
         where: (table, operators) => operators.and(operators.eq(table.id, runId), operators.eq(table.userId, userId))
     })
     if (!run) throw createError({ statusCode: 404, statusMessage: 'Pathwarden run not found' })
+    const state = await db.query.pathwardenState.findFirst({
+        where: (table, operators) => operators.eq(table.userId, userId)
+    })
+    if (!state) throw createError({ statusCode: 409, statusMessage: 'Pathwarden progression state is unavailable' })
+    const levels = pathwardenLevels(state)
     const world = new PathwardenWorld({
         runId: run.id,
         revision: run.revision,
         realm: run.realm,
         seed: Number(run.seed) >>> 0,
         mapPlan: run.mapPlan,
-        gameState: run.gameState ?? null
+        gameState: run.gameState ?? null,
+        boosts: pathwardenBoostEffects(levels, state.runSurgedSnapshot === true)
     })
     return {
         peer,
