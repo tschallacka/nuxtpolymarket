@@ -24,6 +24,7 @@ export function usePathwardenRealtime() {
     const snapshot = ref<PathwardenWorldSnapshot | null>(null)
     const mapPlan = ref<PathwardenMapPlan | null>(null)
     const entities = ref<PathwardenEntityState[]>([])
+    const choiceOffer = ref<{ kind: 'checkpoint' | 'relic', choices: number[] } | null>(null)
     const mapChunks = new Map<number, Uint8Array>()
     let expectedMapChunks = 0
     const predictedSnapshot = ref<PathwardenWorldSnapshot | null>(null)
@@ -64,6 +65,10 @@ export function usePathwardenRealtime() {
             }
             if (packet.header.kind === PathwardenPacketKind.EntitySnapshot) {
                 entities.value = packet.payload as PathwardenEntityState[]
+                return
+            }
+            if (packet.header.kind === PathwardenPacketKind.ChoiceOffer) {
+                choiceOffer.value = packet.payload as { kind: 'checkpoint' | 'relic', choices: number[] }
                 return
             }
             if (packet.header.kind === PathwardenPacketKind.MapSnapshot) {
@@ -115,6 +120,7 @@ export function usePathwardenRealtime() {
         snapshot.value = null
         mapPlan.value = null
         entities.value = []
+        choiceOffer.value = null
         mapChunks.clear()
         expectedMapChunks = 0
         predictedSnapshot.value = null
@@ -156,6 +162,7 @@ export function usePathwardenRealtime() {
         snapshot: readonly(snapshot),
         mapPlan: readonly(mapPlan),
         entities: readonly(entities),
+        choiceOffer: readonly(choiceOffer),
         predictedSnapshot: readonly(predictedSnapshot),
         lastError: readonly(lastError),
         pendingInputs: computed(() => pending.size),

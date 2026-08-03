@@ -3,6 +3,7 @@ import {
     decodePacket,
     decodeCompound,
     encodeEntitySnapshot,
+    encodeChoiceOffer,
     encodeMapSnapshotChunks,
     encodeHello,
     encodeInputCommand,
@@ -107,5 +108,12 @@ describe('Pathwarden binary gameplay protocol', () => {
             v3: 0,
             components: { towerType: 'bolt', col: 12, row: 13 }
         }])
+    })
+
+    it('round-trips bounded server choice offers and choice commands', () => {
+        const offer = decodePacket(encodeChoiceOffer('checkpoint', [0, 1, 2]))
+        expect(offer.payload).toEqual({ kind: 'checkpoint', choices: [0, 1, 2] })
+        const command = decodePacket(encodeInputCommand(4, { type: 'checkpoint-choice', choice: 2 }))
+        expect(command.payload).toMatchObject({ command: { type: 'checkpoint-choice', choice: 2 } })
     })
 })

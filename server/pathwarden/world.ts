@@ -58,6 +58,8 @@ export class PathwardenWorld {
     private selectedTower = 'bolt'
     private spawnRemaining = 0
     private spawnCooldown = 0
+    private choiceKind: 'checkpoint' | 'relic' | null = null
+    private choices: number[] = []
     private onChange: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
@@ -125,7 +127,13 @@ export class PathwardenWorld {
         if (command.type === 'place-tower') return this.validatePlacement(command).allowed
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
+        if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && this.choices.includes(command.choice)
+        if (command.type === 'relic-choice') return this.choiceKind === 'relic' && this.choices.includes(command.choice)
         return command.type === 'select-tower' && PATHWARDEN_DEFENSE_BLUEPRINTS.some(defense => defense.id === command.tower)
+    }
+
+    getChoiceOffer() {
+        return this.choiceKind ? { kind: this.choiceKind, choices: [...this.choices] } : null
     }
 
     getSnapshot() {
@@ -278,6 +286,14 @@ export class PathwardenWorld {
             this.selectedTower = command.tower
             return true
         }
+        if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
+            if (!this.canApply(command)) return false
+            this.state.aether += command.choice * 10
+            this.choiceKind = null
+            this.choices = []
+            this.state.phase = 'planning'
+            return true
+        }
         const placement = this.validatePlacement(command)
         if (!placement.allowed) return false
         const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === this.selectedTower)!
@@ -326,7 +342,13 @@ export class PathwardenWorld {
         if (this.spawnRemaining === 0 && !this.getEntities().some(entity => entity.data.type === 2)) {
             this.state.aether += 20 + this.state.wave * 4
             this.state.score += 100 * this.state.wave
-            this.state.phase = this.state.wave % 4 === 0 ? 'checkpoint' : 'planning'
+            if (this.state.wave % 4 === 0) {
+                this.state.phase = 'checkpoint'
+                this.choiceKind = 'checkpoint'
+                this.choices = [0, 1, 2]
+            } else {
+                this.state.phase = 'planning'
+            }
         }
     }
 
