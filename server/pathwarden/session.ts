@@ -6,6 +6,7 @@ import { PathwardenWorld } from '#server/pathwarden/world'
 import {
     decodePacket,
     encodeCommandAck,
+    encodeEntitySnapshot,
     encodeHelloAck,
     encodeMapSnapshotChunks,
     encodeProtocolError,
@@ -82,7 +83,18 @@ export async function openPathwardenSession(peer: Peer) {
     const previous = sessions.get(session.runId)
     previous?.peer.close(4009, 'Replaced by a newer Pathwarden session')
     previous?.world.stop()
-    session.world.setChangeHandler(snapshot => {
+    session.world.setChangeHandler((snapshot, entities) => {
+        send(session, encodeEntitySnapshot(entities.map(entity => ({
+            id: entity.id,
+            type: entity.data.type,
+            x: entity.x,
+            y: entity.y,
+            z: entity.z,
+            v1: entity.v1,
+            v2: entity.v2,
+            v3: entity.v3,
+            components: entity.data.components
+        })), { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
         send(session, encodeWorldSnapshot(snapshot, { sequence: session.nextPacketSequence++, acknowledgedInput: session.world.lastAppliedInput }))
     })
     sessions.set(session.runId, session)
@@ -91,6 +103,17 @@ export async function openPathwardenSession(peer: Peer) {
         send(session, packet)
         session.nextPacketSequence++
     }
+    send(session, encodeEntitySnapshot(session.world.getEntities().map(entity => ({
+        id: entity.id,
+        type: entity.data.type,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        v1: entity.v1,
+        v2: entity.v2,
+        v3: entity.v3,
+        components: entity.data.components
+    })), { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }))
     send(session, encodeWorldSnapshot(session.world.getSnapshot(), { sequence: session.nextPacketSequence++ }))
     session.world.start()
 }

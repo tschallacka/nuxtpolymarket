@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     decodePacket,
     decodeCompound,
+    encodeEntitySnapshot,
     encodeMapSnapshotChunks,
     encodeHello,
     encodeInputCommand,
@@ -79,5 +80,32 @@ describe('Pathwarden binary gameplay protocol', () => {
         }
         expect(decodeCompound(bytes)).toEqual(map)
         expect(Math.max(...packets.map(packet => packet.byteLength))).toBeLessThan(13 * 1024)
+    })
+
+    it('round-trips authoritative entity state', () => {
+        const packet = encodeEntitySnapshot([{
+            id: 7,
+            type: 1,
+            x: 12,
+            y: 13,
+            z: 0,
+            v1: 0.5,
+            v2: 0,
+            v3: 0,
+            components: { towerType: 'bolt', col: 12, row: 13 }
+        }])
+        const decoded = decodePacket(packet)
+        expect(decoded.header.kind).toBe(PathwardenPacketKind.EntitySnapshot)
+        expect(decoded.payload).toEqual([{
+            id: 7,
+            type: 1,
+            x: 12,
+            y: 13,
+            z: 0,
+            v1: 0.5,
+            v2: 0,
+            v3: 0,
+            components: { towerType: 'bolt', col: 12, row: 13 }
+        }])
     })
 })

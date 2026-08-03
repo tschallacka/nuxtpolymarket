@@ -14,7 +14,8 @@ export const enum PathwardenPacketKind {
     Pong = 9,
     ProtocolError = 10,
     MapSnapshot = 11,
-    MapSnapshotChunk = 12
+    MapSnapshotChunk = 12,
+    EntitySnapshot = 13
 }
 
 export type PathwardenPhase = 'planning' | 'wave' | 'checkpoint' | 'path' | 'upgrade' | 'cashout' | 'victory' | 'defeat'
@@ -41,6 +42,18 @@ export interface PathwardenWorldSnapshot {
     score: number
     paused: boolean
     entityCount: number
+}
+
+export interface PathwardenEntityState {
+    id: number
+    type: number
+    x: number
+    y: number
+    z: number
+    v1: number
+    v2: number
+    v3: number
+    components?: Record<string, number | string | boolean>
 }
 
 export type PathwardenInputCommand =
@@ -300,7 +313,7 @@ function readHeader(reader: ByteReader): PathwardenPacketHeader {
     if (reader.u8() !== PATHWARDEN_PROTOCOL_MAGIC) throw new Error('Invalid Pathwarden packet magic')
     if (reader.u8() !== PATHWARDEN_PROTOCOL_VERSION) throw new Error('Unsupported Pathwarden protocol version')
     const kind = reader.u8()
-    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.MapSnapshotChunk) throw new Error('Unknown Pathwarden packet kind')
+    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.EntitySnapshot) throw new Error('Unknown Pathwarden packet kind')
     const flags = reader.u8()
     const schema = reader.u8()
     reader.u8()
@@ -388,6 +401,24 @@ export function encodeCommandAck(inputSequence: number, tick: number, accepted: 
     return encodePacket({ kind: accepted ? PathwardenPacketKind.CommandAck : PathwardenPacketKind.CommandReject, flags: 0, schema: 1, sequence: inputSequence, tick, acknowledgedInput: inputSequence }, payload.finish())
 }
 
+export function encodeEntitySnapshot(entities: PathwardenEntityState[], header: Partial<PathwardenPacketHeader> = {}) {
+    if (entities.length > 10_000) throw new Error('Pathwarden entity count exceeds protocol limit')
+    const payload = new ByteWriter()
+    payload.varUint(entities.length)
+    for (const entity of entities) {
+        payload.varUint(entity.id)
+        payload.u8(entity.type)
+        payload.value(entity.x)
+        payload.value(entity.y)
+        payload.value(entity.z)
+        payload.value(entity.v1)
+        payload.value(entity.v2)
+        payload.value(entity.v3)
+        payload.value(entity.components ?? null)
+    }
+    return encodePacket({ kind: PathwardenPacketKind.EntitySnapshot, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
+}
+
 export function encodeProtocolError(message: string) {
     const payload = new ByteWriter()
     payload.string(message, 240)
@@ -459,6 +490,20 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
             chunkCount: payloadReader.varUint(),
             bytes: payloadReader.bytesValue(MAP_CHUNK_BYTES)
         }
+    } else if (header.kind === PathwardenPacketKind.EntitySnapshot) {
+        const count = payloadReader.varUint()
+        if (count > 10_000) throw new Error('Pathwarden entity count exceeds protocol limit')
+        payload = Array.from({ length: count }, () => ({
+            id: payloadReader.varUint(),
+            type: payloadReader.u8(),
+            x: payloadReader.value() as number,
+            y: payloadReader.value() as number,
+            z: payloadReader.value() as number,
+            v1: payloadReader.value() as number,
+            v2: payloadReader.value() as number,
+            v3: payloadReader.value() as number,
+            components: (payloadReader.value() as Record<string, number | string | boolean> | null) ?? undefined
+        }))
     }
     if (!payloadReader.done()) throw new Error('Trailing Pathwarden packet data')
     return { header, payload }

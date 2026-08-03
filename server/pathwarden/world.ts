@@ -56,7 +56,7 @@ export class PathwardenWorld {
     private lastInputSequence = 0
     private nextEntityId = 1
     private selectedTower = 'bolt'
-    private onChange: (snapshot: PathwardenWorldSnapshot) => void = () => {}
+    private onChange: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
         this.mapPlan = source.mapPlan
@@ -98,8 +98,8 @@ export class PathwardenWorld {
         }
     }
 
-    setChangeHandler(handler: (snapshot: PathwardenWorldSnapshot) => void) {
-        this.onChange = handler
+    setChangeHandler(handler: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void) {
+        this.onChange = snapshot => handler(snapshot, this.getEntities())
     }
 
     start() {
@@ -144,7 +144,7 @@ export class PathwardenWorld {
         }
         this.entities.set(entity.id, entity)
         this.state.entityCount = this.entities.size
-        this.onChange(this.getSnapshot())
+        this.onChange(this.getSnapshot(), this.getEntities())
         return entity.id
     }
 
@@ -153,7 +153,7 @@ export class PathwardenWorld {
         if (!entity) return false
         Object.assign(entity, patch)
         if (patch.data) entity.data = { ...patch.data, components: patch.data.components ? { ...patch.data.components } : undefined }
-        this.onChange(this.getSnapshot())
+        this.onChange(this.getSnapshot(), this.getEntities())
         return true
     }
 
@@ -161,7 +161,7 @@ export class PathwardenWorld {
         const removed = this.entities.delete(id)
         if (removed) {
             this.state.entityCount = this.entities.size
-            this.onChange(this.getSnapshot())
+            this.onChange(this.getSnapshot(), this.getEntities())
         }
         return removed
     }
@@ -186,7 +186,7 @@ export class PathwardenWorld {
             this.lastInputSequence = queued.inputSequence
             changed = this.apply(queued.command) || changed
         }
-        if (changed || this.state.tick % 10 === 0) this.onChange(this.getSnapshot())
+        if (changed || this.state.tick % 10 === 0) this.onChange(this.getSnapshot(), this.getEntities())
     }
 
     private apply(command: PathwardenInputCommand) {

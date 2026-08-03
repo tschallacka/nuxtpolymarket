@@ -8,6 +8,7 @@ import {
     type PathwardenWorldSnapshot
 } from '#shared/pathwarden/protocol'
 import type { PathwardenMapPlan } from '#shared/types/pathwarden-save'
+import type { PathwardenEntityState } from '#shared/pathwarden/protocol'
 
 export type PathwardenRealtimeStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -22,6 +23,7 @@ export function usePathwardenRealtime() {
     const status = ref<PathwardenRealtimeStatus>('disconnected')
     const snapshot = ref<PathwardenWorldSnapshot | null>(null)
     const mapPlan = ref<PathwardenMapPlan | null>(null)
+    const entities = ref<PathwardenEntityState[]>([])
     const mapChunks = new Map<number, Uint8Array>()
     let expectedMapChunks = 0
     const predictedSnapshot = ref<PathwardenWorldSnapshot | null>(null)
@@ -58,6 +60,10 @@ export function usePathwardenRealtime() {
                     if (inputSequence <= packet.header.acknowledgedInput) pending.delete(inputSequence)
                 }
                 reconcile(next)
+                return
+            }
+            if (packet.header.kind === PathwardenPacketKind.EntitySnapshot) {
+                entities.value = packet.payload as PathwardenEntityState[]
                 return
             }
             if (packet.header.kind === PathwardenPacketKind.MapSnapshot) {
@@ -108,6 +114,7 @@ export function usePathwardenRealtime() {
         pending.clear()
         snapshot.value = null
         mapPlan.value = null
+        entities.value = []
         mapChunks.clear()
         expectedMapChunks = 0
         predictedSnapshot.value = null
@@ -148,6 +155,7 @@ export function usePathwardenRealtime() {
         status: readonly(status),
         snapshot: readonly(snapshot),
         mapPlan: readonly(mapPlan),
+        entities: readonly(entities),
         predictedSnapshot: readonly(predictedSnapshot),
         lastError: readonly(lastError),
         pendingInputs: computed(() => pending.size),
