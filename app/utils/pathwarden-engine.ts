@@ -1345,7 +1345,6 @@ export class PathwardenEngine {
   }
 
   startWave() {
-    if (this.phase !== 'planning' || this.pendingWaveStart) return
     if (this.introStoryActive || this.openingCinematicActive) return
     if (this.serverAuthoritative) {
       this.callbacks.onCommand?.({ type: 'start-wave' })
@@ -1353,6 +1352,7 @@ export class PathwardenEngine {
       this.emitState()
       return
     }
+    if (this.phase !== 'planning' || this.pendingWaveStart) return
     if (this.ambientActors.some(actor => actor.kind !== 'bird')) {
       this.pendingWaveStart = true
       this.ambientEvacuation = 1.35
@@ -1425,13 +1425,13 @@ export class PathwardenEngine {
   }
 
   continueCheckpoint() {
-    if (this.phase !== 'checkpoint') return
     if (this.serverAuthoritative) {
       this.callbacks.onCommand?.({ type: 'continue-checkpoint' })
       this.message = 'Checkpoint command sent to the Warden.'
       this.emitState()
       return
     }
+    if (this.phase !== 'checkpoint') return
     this.noteActivity()
     if (this.wave >= 12) {
       this.phase = 'victory'
@@ -2007,15 +2007,16 @@ export class PathwardenEngine {
   }
 
   setSelectedTargeting(targeting: PathwardenTargeting) {
-    if (this.phase !== 'planning') return
     const tower = this.towers.find(candidate => candidate.id === this.selectedTowerId)
     if (!tower) return
-    this.callbacks.onCommand?.({ type: 'set-targeting', id: tower.id, targeting })
     if (this.serverAuthoritative) {
+      this.callbacks.onCommand?.({ type: 'set-targeting', id: tower.id, targeting })
       this.message = 'Targeting command sent to the Warden.'
       this.emitState()
       return
     }
+    if (this.phase !== 'planning') return
+    this.callbacks.onCommand?.({ type: 'set-targeting', id: tower.id, targeting })
     tower.targeting = targeting
     const label = targeting === 'first' ? 'the closest invader' : targeting === 'strong' ? 'the strongest invader' : 'the fastest invader'
     this.message = `${towerStats(tower.type).name} now targets ${label}.`
@@ -2337,15 +2338,15 @@ export class PathwardenEngine {
   }
 
   sellRelic(instanceId: number) {
-    if (!this.canSellRelics || this.phase === 'wave' || this.phase === 'checkpoint') return
-    const relic = this.relicInventory.find(candidate => candidate.instanceId === instanceId)
-    if (!relic) return
     if (this.serverAuthoritative) {
       this.callbacks.onCommand?.({ type: 'sell-relic', instanceId })
       this.message = 'Relic sale command sent to the Warden.'
       this.emitState()
       return
     }
+    if (!this.canSellRelics || this.phase === 'wave' || this.phase === 'checkpoint') return
+    const relic = this.relicInventory.find(candidate => candidate.instanceId === instanceId)
+    if (!relic) return
     this.relicInventory.splice(this.relicInventory.indexOf(relic), 1)
     this.aether += relic.sellValue
     this.message = `${relic.name} dissolved · ${relic.sellValue} Aether recovered.`
@@ -2507,16 +2508,17 @@ export class PathwardenEngine {
   }
 
   salvageSelectedBuilding() {
-    if (this.phase !== 'planning') return
     const tower = this.towers.find(candidate => candidate.id === this.selectedTowerId)
-    if (!tower) return
-    const salvage = this.salvageValue(tower)
-    this.callbacks.onCommand?.({ type: 'salvage-tower', id: tower.id })
     if (this.serverAuthoritative) {
+      if (!tower) return
+      this.callbacks.onCommand?.({ type: 'salvage-tower', id: tower.id })
       this.message = 'Dismantle command sent to the Warden.'
       this.emitState()
       return
     }
+    if (this.phase !== 'planning' || !tower) return
+    const salvage = this.salvageValue(tower)
+    this.callbacks.onCommand?.({ type: 'salvage-tower', id: tower.id })
     this.towers.splice(this.towers.indexOf(tower), 1)
     this.aether += salvage
     this.selectedTowerId = null
@@ -2527,17 +2529,18 @@ export class PathwardenEngine {
   }
 
   upgradeSelectedBuilding() {
-    if (this.phase !== 'planning') return
     const tower = this.towers.find(candidate => candidate.id === this.selectedTowerId)
-    if (!tower || tower.level >= 3) return
-    const cost = 40 * tower.level
-    if (this.aether < cost) return
-    this.callbacks.onCommand?.({ type: 'upgrade-tower', id: tower.id })
     if (this.serverAuthoritative) {
+      if (!tower) return
+      this.callbacks.onCommand?.({ type: 'upgrade-tower', id: tower.id })
       this.message = 'Upgrade command sent to the Warden.'
       this.emitState()
       return
     }
+    if (this.phase !== 'planning' || !tower || tower.level >= 3) return
+    const cost = 40 * tower.level
+    if (this.aether < cost) return
+    this.callbacks.onCommand?.({ type: 'upgrade-tower', id: tower.id })
     tower.level += 1
     tower.invested += cost
     this.aether -= cost
