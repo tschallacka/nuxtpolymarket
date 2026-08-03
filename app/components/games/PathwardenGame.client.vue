@@ -22,12 +22,11 @@ import {
   pathwardenBoostEffects,
   pathwardenMaxAetherAtCheckpoint
 } from '#shared/utils/gamelogic/pathwarden'
-import {
-  runPathwardenSimulations,
-  type PathwardenSimulationDifficulty,
-  type PathwardenSimulationResult,
-  type PathwardenSimulationStrategy,
-  type PathwardenSimulationWaveResult
+import type {
+  PathwardenSimulationDifficulty,
+  PathwardenSimulationResult,
+  PathwardenSimulationStrategy,
+  PathwardenSimulationWaveResult
 } from '#shared/utils/gamelogic/pathwarden-simulator'
 import RelicSwapDebug from '~/components/pathwarden/RelicSwapDebug.client.vue'
 
@@ -656,14 +655,19 @@ function claimCheckpointReward(wave: number) {
 async function runSimulator() {
   if (simulatorRunning.value) return
   simulatorRunning.value = true
-  await new Promise(resolve => setTimeout(resolve, 20))
-  simulationResult.value = runPathwardenSimulations({
-    difficulty: simulationDifficulty.value,
-    strategy: simulationStrategy.value,
-    runs: 1000,
-    seed: Date.now()
-  })
-  simulatorRunning.value = false
+  try {
+    simulationResult.value = await $fetch('/api/pathwarden/simulate', {
+      method: 'POST',
+      body: {
+        difficulty: simulationDifficulty.value,
+        strategy: simulationStrategy.value
+      }
+    })
+  } catch (error: unknown) {
+    toast.add({ title: 'Could not run the battle simulator', description: apiErrorMessage(error, 'Try again in a moment.'), color: 'error' })
+  } finally {
+    simulatorRunning.value = false
+  }
 }
 
 const simulationChartX = (wave: PathwardenSimulationWaveResult) => wave.wave
