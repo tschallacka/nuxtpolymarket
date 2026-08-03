@@ -217,13 +217,13 @@ export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): Ar
     const session = [...sessions.values()].find(candidate => candidate.peer === peer)
     if (!session) return
     try {
-        const payload = message.arrayBuffer()
-        const packet = decodePacket(payload)
-        pathwardenMetricPacket('in', payload.byteLength)
+        const rawPayload = message.arrayBuffer()
+        const packet = decodePacket(rawPayload)
+        pathwardenMetricPacket('in', rawPayload.byteLength)
         if (packet.header.kind !== PathwardenPacketKind.InputCommand) return
-        const payload = packet.payload as { inputSequence: number, command: PathwardenInputCommand } | null
-        if (!payload) throw new Error('Invalid Pathwarden input')
-        handleCommand(session, payload.command, payload.inputSequence)
+        const input = packet.payload as { inputSequence: number, command: PathwardenInputCommand } | null
+        if (!input) throw new Error('Invalid Pathwarden input')
+        handleCommand(session, input.command, input.inputSequence)
     } catch (error) {
         send(session, encodeProtocolError(error instanceof Error ? error.message : 'Invalid Pathwarden packet'))
     }
