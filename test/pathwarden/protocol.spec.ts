@@ -148,6 +148,31 @@ describe('Pathwarden binary gameplay protocol', () => {
         })
     })
 
+    it('can omit repeated map state from normal world snapshots', () => {
+        const packet = encodeWorldSnapshot({
+            runId: 'run-1',
+            revision: 1,
+            realm: 1,
+            seed: 1,
+            tick: 22,
+            phase: 'wave',
+            wave: 1,
+            lives: 20,
+            aether: 100,
+            score: 0,
+            streak: 0,
+            flawlessWaves: 0,
+            relicPower: 0,
+            paused: false,
+            entityCount: 0,
+            claimedRoomIds: ['castle'],
+            revealedCells: [{ col: 1, row: 1 }]
+        }, {}, false)
+        const decoded = decodePacket(packet)
+        expect(decoded.header.flags & 1).toBe(1)
+        expect(decoded.payload).toMatchObject({ claimedRoomIds: [], revealedCells: [] })
+    })
+
     it('round-trips bounded server choice offers and choice commands', () => {
         const offer = decodePacket(encodeChoiceOffer('checkpoint', [0, 1, 2], {}, 7))
         expect(offer.payload).toEqual({ kind: 'checkpoint', offerRevision: 7, choices: [0, 1, 2] })

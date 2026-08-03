@@ -379,7 +379,7 @@ export function encodeHelloAck(header: Partial<PathwardenPacketHeader> = {}) {
     return encodePacket({ kind: PathwardenPacketKind.HelloAck, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
-export function encodeWorldSnapshot(snapshot: PathwardenWorldSnapshot, header: Partial<PathwardenPacketHeader> = {}) {
+export function encodeWorldSnapshot(snapshot: PathwardenWorldSnapshot, header: Partial<PathwardenPacketHeader> = {}, includeMapState = true) {
     const payload = new ByteWriter()
     payload.string(snapshot.runId, 128)
     payload.u32(snapshot.revision)
@@ -395,14 +395,16 @@ export function encodeWorldSnapshot(snapshot: PathwardenWorldSnapshot, header: P
     payload.u16(Math.max(0, Math.round(snapshot.relicPower * 100)))
     payload.bool(snapshot.paused)
     payload.varUint(snapshot.entityCount)
-    payload.varUint(snapshot.claimedRoomIds.length)
-    for (const roomId of snapshot.claimedRoomIds) payload.string(roomId, 96)
-    payload.varUint(snapshot.revealedCells.length)
-    for (const cell of snapshot.revealedCells) {
-        payload.u16(cell.col)
-        payload.u16(cell.row)
+    if (includeMapState) {
+        payload.varUint(snapshot.claimedRoomIds.length)
+        for (const roomId of snapshot.claimedRoomIds) payload.string(roomId, 96)
+        payload.varUint(snapshot.revealedCells.length)
+        for (const cell of snapshot.revealedCells) {
+            payload.u16(cell.col)
+            payload.u16(cell.row)
+        }
     }
-    return encodePacket({ kind: PathwardenPacketKind.FullSnapshot, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: snapshot.tick, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
+    return encodePacket({ kind: PathwardenPacketKind.FullSnapshot, flags: includeMapState ? 0 : 1, schema: 1, sequence: header.sequence ?? 0, tick: snapshot.tick, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
 export function encodeMapSnapshot(mapPlan: unknown, header: Partial<PathwardenPacketHeader> = {}) {
@@ -576,8 +578,8 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
             relicPower: payloadReader.u16() / 100,
             paused: payloadReader.bool(),
             entityCount: payloadReader.varUint(),
-            claimedRoomIds: Array.from({ length: payloadReader.varUint() }, () => payloadReader.string(96)),
-            revealedCells: Array.from({ length: payloadReader.varUint() }, () => ({ col: payloadReader.u16(), row: payloadReader.u16() }))
+            claimedRoomIds: (header.flags & 1) === 0 ? Array.from({ length: payloadReader.varUint() }, () => payloadReader.string(96)) : [],
+            revealedCells: (header.flags & 1) === 0 ? Array.from({ length: payloadReader.varUint() }, () => ({ col: payloadReader.u16(), row: payloadReader.u16() })) : []
         }
     } else if (header.kind === PathwardenPacketKind.InputCommand) {
         const inputSequence = payloadReader.varUint()

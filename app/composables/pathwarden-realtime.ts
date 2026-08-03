@@ -55,7 +55,14 @@ export function usePathwardenRealtime() {
         try {
             const packet = decodePacket(event.data as ArrayBuffer)
             if (packet.header.kind === PathwardenPacketKind.FullSnapshot) {
-                const next = packet.payload as PathwardenWorldSnapshot
+                const decoded = packet.payload as PathwardenWorldSnapshot
+                const next = packet.header.flags & 1
+                    ? {
+                        ...decoded,
+                        claimedRoomIds: snapshot.value?.claimedRoomIds ?? [],
+                        revealedCells: snapshot.value?.revealedCells ?? []
+                    }
+                    : decoded
                 const wasDifferent = snapshot.value && (snapshot.value.tick > next.tick || snapshot.value.phase !== next.phase || snapshot.value.wave !== next.wave)
                 if (wasDifferent) corrections.value += 1
                 snapshot.value = next
