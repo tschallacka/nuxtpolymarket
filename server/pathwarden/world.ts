@@ -829,14 +829,16 @@ export class PathwardenWorld {
                 : targeting === 'fast'
                     ? Number(right.data.components?.speed ?? 1) - Number(left.data.components?.speed ?? 1)
                     : Number(right.data.components?.progress ?? 0) - Number(left.data.components?.progress ?? 0))[0]!
-            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: Math.max(1, Math.round(defense.rate * 20 / (this.boosts.rateMultiplier * (1 + relicEffects.attackSpeedPct / 100)))) } } })
-            this.spawnEntity({ type: 3, components: {
+            const shotCount = Number(components.relicShots ?? 0) + 1
+            const nextCooldown = Math.max(1, Math.round(defense.rate * 20 / (this.boosts.rateMultiplier * (1 + relicEffects.attackSpeedPct / 100))))
+            this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: nextCooldown, relicShots: shotCount } } })
+            const projectile = (damageMultiplier = 1) => this.spawnEntity({ type: 3, components: {
                 towerType: String(components.towerType ?? 'bolt'),
                 sourceId: tower.id,
                 targetId: target.id,
                 relicFamily,
                 relicPower,
-                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * this.boosts.damageMultiplier,
+                damage: this.towerDamage(String(components.towerType ?? 'bolt'), Number(components.level ?? 1), relicPower, relicFamily) * this.boosts.damageMultiplier * damageMultiplier,
                 splash: defense.splash / 45 + relicEffects.impactRadius / 45,
                 impactDamagePct: relicEffects.impactDamagePct,
                 chainCount: relicEffects.chainCount,
@@ -847,6 +849,10 @@ export class PathwardenWorld {
                 aetherBonusPct: relicEffects.aetherBonusPct,
                 progress: 0
             } }, tower.x, tower.y, 0, target.x, target.y)
+            projectile()
+            if (relicEffects.echoEveryShots > 0 && shotCount % Math.max(1, Math.floor(relicEffects.echoEveryShots)) === 0) {
+                projectile(Math.max(0, relicEffects.echoPowerPct / 100))
+            }
         }
     }
 

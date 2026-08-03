@@ -441,4 +441,15 @@ describe('Pathwarden authoritative world', () => {
         expect(world.getEntities().find(entity => entity.id === chained)?.data.components?.hp).toBe(90)
         expect(world.getEntities().find(entity => entity.id === untouched)?.data.components?.hp).toBe(100)
     })
+
+    it('emits a deterministic echo projectile on the shared cadence', () => {
+        const world = new PathwardenWorld({ runId: 'run-echo', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        world.spawnEntity({ type: 1, components: { towerType: 'bolt', level: 1, relicFamily: 'chain', relicPower: 1, relicShots: 3, cooldown: 0 } }, 10, 10)
+        world.spawnEntity({ type: 2, components: { hp: 100, progress: 0.5, speed: 1 } }, 11, 10)
+        const simulateTowers = (world as unknown as { simulateTowers: () => void }).simulateTowers
+        simulateTowers.call(world)
+        const projectiles = world.getEntities().filter(entity => entity.data.type === 3)
+        expect(projectiles).toHaveLength(2)
+        expect(Number(projectiles[1]?.data.components?.damage)).toBeCloseTo(Number(projectiles[0]?.data.components?.damage) * 0.48)
+    })
 })
