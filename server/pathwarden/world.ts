@@ -435,16 +435,18 @@ export class PathwardenWorld {
             enemyId: this.nextEntityId,
             relicInstanceId: this.nextRelicInstanceId,
             lastInputSequence: this.lastInputSequence,
-            ambientActor: ambient && ambientComponents ? {
-                storyId: Number(ambientComponents.storyId ?? 1),
-                progress: Number(ambientComponents.progress ?? 0),
-                duration: Number(ambientComponents.duration ?? 1800),
-                family: String(ambientComponents.family ?? 'Market day'),
-                kind: String(ambientComponents.kind ?? 'market'),
-                variant: Number(ambientComponents.variant ?? 1),
-                col: ambient.x,
-                row: ambient.y
-            } : undefined,
+            ambientActor: ambient && ambientComponents
+                ? {
+                    storyId: Number(ambientComponents.storyId ?? 1),
+                    progress: Number(ambientComponents.progress ?? 0),
+                    duration: Number(ambientComponents.duration ?? 1800),
+                    family: String(ambientComponents.family ?? 'Market day'),
+                    kind: String(ambientComponents.kind ?? 'market'),
+                    variant: Number(ambientComponents.variant ?? 1),
+                    col: ambient.x,
+                    row: ambient.y
+                }
+                : undefined,
             ambientCooldown: this.ambientCooldown,
             nextAmbientStoryId: this.nextAmbientStoryId
         }
