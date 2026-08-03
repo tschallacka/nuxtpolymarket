@@ -523,7 +523,10 @@ function sellRelic(instanceId: number) {
 
 function togglePause() {
   const nextPaused = !snapshot.value.paused
-  if (realtime.status.value === 'connected') realtime.send({ type: 'pause', value: nextPaused })
+  if (activeRunId.value) {
+    realtime.send({ type: 'pause', value: nextPaused })
+    return
+  }
   engine?.setPaused(nextPaused)
 }
 
@@ -672,7 +675,10 @@ const simulationChartTooltip = (wave: PathwardenSimulationWaveResult) =>
 async function startWave() {
   upgradeChoices.value = []
   if (!await ensureRunStarted()) return
-  if (realtime.status.value === 'connected') realtime.send({ type: 'start-wave' })
+  if (activeRunId.value) {
+    realtime.send({ type: 'start-wave' })
+    return
+  }
   engine?.startWave()
 }
 
