@@ -5,6 +5,7 @@ import {
     encodeEntityDelta,
     encodeEntitySnapshot,
     encodeChoiceOffer,
+    encodeGameplayEvent,
     encodeMapStateDelta,
     encodeMapSnapshotChunks,
     encodeHello,
@@ -146,6 +147,13 @@ describe('Pathwarden binary gameplay protocol', () => {
             claimedRoomIds: ['room-2'],
             revealedCells: [{ col: 15, row: 9 }, { col: 16, row: 9 }]
         })
+    })
+
+    it('round-trips stable one-shot gameplay events', () => {
+        const packet = encodeGameplayEvent({ id: 42, type: 1, entityId: 9, x: 3, y: 4, z: 0, v1: 0, v2: 0, v3: 0 }, { tick: 20 })
+        const decoded = decodePacket(packet)
+        expect(decoded.header.kind).toBe(PathwardenPacketKind.GameplayEvent)
+        expect(decoded.payload).toEqual({ id: 42, type: 1, entityId: 9, x: 3, y: 4, z: 0, v1: 0, v2: 0, v3: 0 })
     })
 
     it('can omit repeated map state from normal world snapshots', () => {

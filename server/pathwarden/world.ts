@@ -3,7 +3,8 @@ import { PATHWARDEN_DEFENSE_BLUEPRINTS } from '#shared/utils/gamelogic/pathwarde
 import type {
     PathwardenInputCommand,
     PathwardenPhase,
-    PathwardenWorldSnapshot
+    PathwardenWorldSnapshot,
+    PathwardenGameplayEvent
 } from '#shared/pathwarden/protocol'
 import { hashPathwardenState, recordPathwardenReplay } from '#server/pathwarden/replay'
 
@@ -58,6 +59,8 @@ export class PathwardenWorld {
     private timer: ReturnType<typeof setInterval> | null = null
     private lastInputSequence = 0
     private nextEntityId = 1
+    private nextEventId = 1
+    private readonly events: PathwardenGameplayEvent[] = []
     private selectedTower = 'bolt'
     private towerPurchases: Record<string, number> = {}
     private waveStartingLives = 20
@@ -180,8 +183,11 @@ export class PathwardenWorld {
         for (const relic of source.gameState?.relicInventory ?? []) this.spawnRelic(relic)
     }
 
-    setChangeHandler(handler: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void) {
-        this.onChange = snapshot => handler(snapshot, this.getEntities())
+    setChangeHandler(handler: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[], events: PathwardenGameplayEvent[]) => void) {
+        this.onChange = snapshot => {
+            const events = this.events.splice(0)
+            handler(snapshot, this.getEntities(), events)
+        }
     }
 
     setAmbientStoryHandler(handler: (storyId: number) => void) {
@@ -731,7 +737,8 @@ export class PathwardenWorld {
             const nextY = projectile.y + (target.y - projectile.y) * 0.25
             if (progress >= 1) {
                 this.removeEntity(projectile.id)
-                this.spawnEntity({ type: 6, components: { kind: 'impact', progress: 0, duration: 8, color: 'primary' } }, target.x, target.y)
+                const impactId = this.spawnEntity({ type: 6, components: { kind: 'impact', progress: 0, duration: 8, color: 'primary' } }, target.x, target.y)
+                this.events.push({ id: this.nextEventId++, type: 1, entityId: impactId, x: target.x, y: target.y, z: 0, v1: 0, v2: 0, v3: 0 })
                 const splash = Math.max(0, Number(components.splash ?? 0))
                 const affected = this.getEntities().filter(candidate => candidate.data.type === 2
                     && Math.hypot(candidate.x - target.x, candidate.y - target.y) <= splash)

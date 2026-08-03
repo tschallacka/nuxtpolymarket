@@ -16,6 +16,7 @@ import {
 import {
     decodePacket,
     encodeCommandAck,
+    encodeGameplayEvent,
     encodeEntityDelta,
     encodeEntitySnapshot,
     encodeChoiceOffer,
@@ -27,6 +28,7 @@ import {
     PathwardenPacketKind,
     type PathwardenEntityState,
     type PathwardenInputCommand,
+    type PathwardenGameplayEvent,
     type PathwardenWorldSnapshot
 } from '#shared/pathwarden/protocol'
 
@@ -205,7 +207,7 @@ export async function openPathwardenSession(peer: Peer) {
         persistWorld(previous, previous.world.getSnapshot().tick, true)
         pathwardenMetricDisconnection()
     }
-    session.world.setChangeHandler((snapshot, entities) => {
+    session.world.setChangeHandler((snapshot, entities, events: PathwardenGameplayEvent[]) => {
         const nextEntities = entities.map(entityState)
         const upserts = nextEntities.filter(entity => {
             const previous = session.lastEntities.get(entity.id)
@@ -229,6 +231,9 @@ export async function openPathwardenSession(peer: Peer) {
         }
         if (upserts.length || removed.length) {
             send(session, encodeEntityDelta({ upserts, removed }, { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
+        }
+        for (const event of events) {
+            send(session, encodeGameplayEvent(event, { sequence: session.nextPacketSequence++, tick: snapshot.tick, acknowledgedInput: session.world.lastAppliedInput }))
         }
         send(session, encodeWorldSnapshot(snapshot, { sequence: session.nextPacketSequence++, acknowledgedInput: session.world.lastAppliedInput }, false))
         const offer = session.world.getChoiceOffer()

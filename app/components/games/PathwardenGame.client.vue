@@ -1181,6 +1181,10 @@ watch(realtime.entities, entities => {
   engine?.applyAuthoritativeEntities(entities)
 })
 
+watch(realtime.events, events => {
+  engine?.applyAuthoritativeEvents(events)
+})
+
 watch(realtime.choiceOffer, offer => {
   if (!offer) return
   engine?.setAuthoritativeChoiceRevision(offer.offerRevision)

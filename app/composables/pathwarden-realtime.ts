@@ -6,7 +6,8 @@ import {
     PathwardenPacketKind,
     type PathwardenInputCommand,
     type PathwardenWorldSnapshot,
-    type PathwardenEntityState
+    type PathwardenEntityState,
+    type PathwardenGameplayEvent
 } from '#shared/pathwarden/protocol'
 import type { PathwardenMapPlan } from '#shared/types/pathwarden-save'
 
@@ -24,6 +25,8 @@ export function usePathwardenRealtime() {
     const snapshot = ref<PathwardenWorldSnapshot | null>(null)
     const mapPlan = ref<PathwardenMapPlan | null>(null)
     const entities = ref<PathwardenEntityState[]>([])
+    const events = ref<PathwardenGameplayEvent[]>([])
+    const receivedEventIds = new Set<number>()
     const choiceOffer = ref<{ kind: 'checkpoint' | 'relic' | 'path', choices: number[], offerRevision: number } | null>(null)
     const mapChunks = new Map<number, Uint8Array>()
     let expectedMapChunks = 0
@@ -81,6 +84,17 @@ export function usePathwardenRealtime() {
             }
             if (packet.header.kind === PathwardenPacketKind.EntitySnapshot) {
                 entities.value = packet.payload as PathwardenEntityState[]
+                return
+            }
+            if (packet.header.kind === PathwardenPacketKind.GameplayEvent) {
+                const event = packet.payload as PathwardenGameplayEvent
+                if (receivedEventIds.has(event.id)) return
+                receivedEventIds.add(event.id)
+                if (receivedEventIds.size > 2048) {
+                    const oldest = receivedEventIds.values().next().value
+                    if (oldest !== undefined) receivedEventIds.delete(oldest)
+                }
+                events.value = [...events.value, event].slice(-64)
                 return
             }
             if (packet.header.kind === PathwardenPacketKind.EntityDelta) {
@@ -159,6 +173,8 @@ export function usePathwardenRealtime() {
         snapshot.value = null
         mapPlan.value = null
         entities.value = []
+        events.value = []
+        receivedEventIds.clear()
         choiceOffer.value = null
         mapChunks.clear()
         expectedMapChunks = 0
@@ -218,6 +234,7 @@ export function usePathwardenRealtime() {
         snapshot: readonly(snapshot),
         mapPlan: readonly(mapPlan),
         entities: readonly(entities),
+        events: readonly(events),
         choiceOffer: readonly(choiceOffer),
         predictedSnapshot: readonly(predictedSnapshot),
         lastError: readonly(lastError),

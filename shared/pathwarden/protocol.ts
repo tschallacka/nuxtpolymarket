@@ -18,7 +18,8 @@ export const enum PathwardenPacketKind {
     EntitySnapshot = 13,
     ChoiceOffer = 14,
     EntityDelta = 15,
-    MapStateDelta = 16
+    MapStateDelta = 16,
+    GameplayEvent = 17
 }
 
 export type PathwardenPhase = 'planning' | 'wave' | 'checkpoint' | 'path' | 'upgrade' | 'cashout' | 'victory' | 'defeat'
@@ -72,6 +73,18 @@ export interface PathwardenEntityDelta {
 export interface PathwardenMapStateDelta {
     claimedRoomIds: string[]
     revealedCells: Array<{ col: number, row: number }>
+}
+
+export interface PathwardenGameplayEvent {
+    id: number
+    type: number
+    entityId: number
+    x: number
+    y: number
+    z: number
+    v1: number
+    v2: number
+    v3: number
 }
 
 export type PathwardenInputCommand =
@@ -342,7 +355,7 @@ function readHeader(reader: ByteReader): PathwardenPacketHeader {
     if (reader.u8() !== PATHWARDEN_PROTOCOL_MAGIC) throw new Error('Invalid Pathwarden packet magic')
     if (reader.u8() !== PATHWARDEN_PROTOCOL_VERSION) throw new Error('Unsupported Pathwarden protocol version')
     const kind = reader.u8()
-    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.MapStateDelta) throw new Error('Unknown Pathwarden packet kind')
+    if (kind < PathwardenPacketKind.Hello || kind > PathwardenPacketKind.GameplayEvent) throw new Error('Unknown Pathwarden packet kind')
     const flags = reader.u8()
     const schema = reader.u8()
     reader.u8()
@@ -491,6 +504,20 @@ export function encodeMapStateDelta(delta: PathwardenMapStateDelta, header: Part
         payload.u16(cell.row)
     }
     return encodePacket({ kind: PathwardenPacketKind.MapStateDelta, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
+}
+
+export function encodeGameplayEvent(event: PathwardenGameplayEvent, header: Partial<PathwardenPacketHeader> = {}) {
+    const payload = new ByteWriter()
+    payload.varUint(event.id)
+    payload.u8(event.type)
+    payload.varUint(event.entityId)
+    payload.value(event.x)
+    payload.value(event.y)
+    payload.value(event.z)
+    payload.value(event.v1)
+    payload.value(event.v2)
+    payload.value(event.v3)
+    return encodePacket({ kind: PathwardenPacketKind.GameplayEvent, flags: 0, schema: 1, sequence: header.sequence ?? 0, tick: header.tick ?? 0, acknowledgedInput: header.acknowledgedInput ?? 0 }, payload.finish())
 }
 
 export function encodeChoiceOffer(kind: 'checkpoint' | 'relic' | 'path', choices: number[], header: Partial<PathwardenPacketHeader> = {}, offerRevision = 0) {
@@ -667,6 +694,18 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
         payload = {
             claimedRoomIds,
             revealedCells: Array.from({ length: revealedCellCount }, () => ({ col: payloadReader.u16(), row: payloadReader.u16() }))
+        }
+    } else if (header.kind === PathwardenPacketKind.GameplayEvent) {
+        payload = {
+            id: payloadReader.varUint(),
+            type: payloadReader.u8(),
+            entityId: payloadReader.varUint(),
+            x: payloadReader.value() as number,
+            y: payloadReader.value() as number,
+            z: payloadReader.value() as number,
+            v1: payloadReader.value() as number,
+            v2: payloadReader.value() as number,
+            v3: payloadReader.value() as number
         }
     } else if (header.kind === PathwardenPacketKind.ChoiceOffer) {
         const kind = payloadReader.u8()
