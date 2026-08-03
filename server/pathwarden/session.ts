@@ -3,6 +3,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { db } from '#server/database'
 import { pathwardenRuns } from '#server/database/schema'
 import { auth } from '#server/utils/auth'
+import { recordPathwardenAmbientStory } from '#server/utils/pathwarden'
 import { PathwardenWorld } from '#server/pathwarden/world'
 import {
     decodePacket,
@@ -124,6 +125,9 @@ export async function openPathwardenSession(peer: Peer) {
         const offer = session.world.getChoiceOffer()
         if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: snapshot.tick }))
         persistWorld(session, snapshot.tick, snapshot.phase === 'victory' || snapshot.phase === 'defeat' || snapshot.phase === 'cashout')
+    })
+    session.world.setAmbientStoryHandler(storyId => {
+        void db.transaction(tx => recordPathwardenAmbientStory(tx, session.userId, storyId)).catch(() => {})
     })
     sessions.set(session.runId, session)
     send(session, encodeHelloAck({ sequence: session.nextPacketSequence++ }))

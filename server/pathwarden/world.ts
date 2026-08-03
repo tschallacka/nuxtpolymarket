@@ -66,6 +66,7 @@ export class PathwardenWorld {
     private batching = false
     private dirty = false
     private onChange: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void = () => {}
+    private onAmbientStoryComplete: (storyId: number) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
         this.mapPlan = source.mapPlan
@@ -112,6 +113,10 @@ export class PathwardenWorld {
 
     setChangeHandler(handler: (snapshot: PathwardenWorldSnapshot, entities: PathwardenEntity[]) => void) {
         this.onChange = snapshot => handler(snapshot, this.getEntities())
+    }
+
+    setAmbientStoryHandler(handler: (storyId: number) => void) {
+        this.onAmbientStoryComplete = handler
     }
 
     start() {
@@ -517,8 +522,9 @@ export class PathwardenWorld {
             const road = this.mapPlan.rooms.find(room => this.claimedRooms.has(room.id))?.roadCells[0] ?? { col: 0, row: 0 }
             this.spawnEntity({
                 type: 4,
-                components: { storyId: this.nextAmbientStoryId++, progress: 0, duration: 120, kind: 'market' }
+                components: { storyId: this.nextAmbientStoryId, progress: 0, duration: 120, kind: 'market' }
             }, road.col, road.row)
+            this.nextAmbientStoryId = this.nextAmbientStoryId % 250 + 1
             this.ambientCooldown = 260
             return
         }
@@ -528,6 +534,7 @@ export class PathwardenWorld {
             this.removeEntity(ambient.id)
             this.state.aether += 5
             this.state.score += 5
+            this.onAmbientStoryComplete(Number(components.storyId ?? 1))
         } else {
             this.updateEntity(ambient.id, { data: { type: 4, components: { ...components, progress } } })
         }

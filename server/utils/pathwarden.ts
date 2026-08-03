@@ -11,6 +11,10 @@ import {
     pathwardenMaxWaveForElapsedMs,
     type PathwardenBoostLevels
 } from '#shared/utils/gamelogic/pathwarden'
+import {
+    PATHWARDEN_AMBIENT_MIN_INTERVAL_MS,
+    PATHWARDEN_AMBIENT_STORY_COUNT
+} from '#shared/utils/gamelogic/pathwarden'
 
 export type LockedPathwardenState = typeof pathwardenState.$inferSelect
 
@@ -23,6 +27,33 @@ export function pathwardenLevels(state: LockedPathwardenState): PathwardenBoostL
         banner: state.bannerLevel,
         bounty: state.bountyLevel,
         arcanist: state.arcanistLevel
+    }
+}
+
+export async function recordPathwardenAmbientStory(tx: DbExecutor, userId: string, storyId: number, now = Date.now()) {
+    if (!Number.isInteger(storyId) || storyId < 1 || storyId > PATHWARDEN_AMBIENT_STORY_COUNT) {
+        throw createError({ statusCode: 400, statusMessage: 'Unknown ambient story' })
+    }
+    const state = await getLockedPathwardenState(tx, userId)
+    if (!state.runStartedAt) throw createError({ statusCode: 409, statusMessage: 'Ambient stories only unfold during a march' })
+    if (state.lastAmbientStoryAt && now - state.lastAmbientStoryAt.getTime() < PATHWARDEN_AMBIENT_MIN_INTERVAL_MS) {
+        throw createError({ statusCode: 429, statusMessage: 'That story has not had time to unfold yet' })
+    }
+    const stories = [...new Set([...state.ambientStoryIds, storyId])].sort((a, b) => a - b)
+    const achievementUnlocked = stories.length === PATHWARDEN_AMBIENT_STORY_COUNT && !state.ambientRewardClaimed
+    await tx.update(pathwardenState)
+        .set({
+            ambientStoryIds: stories,
+            ambientRewardClaimed: state.ambientRewardClaimed || achievementUnlocked,
+            freeBoostCredits: state.freeBoostCredits + (achievementUnlocked ? 1 : 0),
+            lastAmbientStoryAt: new Date(now)
+        })
+        .where(eq(pathwardenState.userId, userId))
+    return {
+        seen: stories.length,
+        total: PATHWARDEN_AMBIENT_STORY_COUNT,
+        achievementUnlocked,
+        freeBoostCredits: state.freeBoostCredits + (achievementUnlocked ? 1 : 0)
     }
 }
 
