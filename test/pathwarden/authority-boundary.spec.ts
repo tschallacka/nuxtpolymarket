@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest'
 const root = resolve(import.meta.dirname, '../..')
 const componentPath = resolve(root, 'app/components/games/PathwardenGame.client.vue')
 const enginePath = resolve(root, 'app/utils/pathwarden-engine.ts')
+const debugClearCachePath = resolve(root, 'server/api/pathwarden/debug-clear-cache.post.ts')
 const componentSource = readFileSync(componentPath, 'utf8')
 const engineSource = readFileSync(enginePath, 'utf8')
+const debugClearCacheSource = readFileSync(debugClearCachePath, 'utf8')
 
 function filesUnder(directory: string): string[] {
     return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -23,6 +25,7 @@ describe('Pathwarden authority boundaries', () => {
         expect(componentSource).not.toContain("method: 'PUT', body: { revision")
         expect(componentSource).not.toContain("'/api/pathwarden/ambient'")
         expect(componentSource).toContain('engine.setServerAuthoritative()')
+        expect(debugClearCacheSource).toContain('closePathwardenSessionsForUser')
         const authoritativePlacement = engineSource.indexOf("if (this.serverAuthoritative && this.phase === 'planning')")
         const localPlacementValidation = engineSource.indexOf('const placement = this.placementStatus(cell)')
         expect(authoritativePlacement).toBeGreaterThan(-1)
