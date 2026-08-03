@@ -148,6 +148,7 @@ export class PathwardenWorld {
         if (command.type === 'continue-checkpoint') return this.state.phase === 'checkpoint'
         if (command.type === 'claim-path') return this.state.phase === 'path' && this.choiceKind === 'path' && this.choices.includes(command.choice)
         if (command.type === 'sell-relic') return this.state.phase !== 'wave' && this.state.phase !== 'checkpoint' && this.entities.get(command.instanceId)?.data.type === 5
+        if (command.type === 'bind-relic') return this.validateRelicBinding(command)
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
         if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && this.choices.includes(command.choice)
@@ -246,8 +247,10 @@ export class PathwardenWorld {
                 level: 1,
                 merges: 0,
                 targeting: 'first' as const,
-                relicStacks: 0,
-                relicPower: 0,
+                relicFamily: entity.data.components?.relicFamily ? String(entity.data.components.relicFamily) : undefined,
+                relicId: entity.data.components?.relicId ? String(entity.data.components.relicId) : undefined,
+                relicStacks: Number(entity.data.components?.relicStacks ?? 0),
+                relicPower: Number(entity.data.components?.relicPower ?? 0),
                 relicShots: 0
             })),
             enemies: entities.filter(entity => entity.data.type === 2).map(entity => ({
@@ -386,6 +389,21 @@ export class PathwardenWorld {
         if (command.type === 'sell-relic') {
             const relic = this.entities.get(command.instanceId)!
             this.state.aether += Number(relic.data.components?.sellValue ?? 0)
+            this.removeEntity(relic.id)
+            return true
+        }
+        if (command.type === 'bind-relic') {
+            const tower = this.entities.get(command.towerId)!
+            const relic = this.entities.get(command.instanceId)!
+            const relicComponents = relic.data.components ?? {}
+            const towerComponents = tower.data.components ?? {}
+            this.updateEntity(tower.id, { data: { type: 1, components: {
+                ...towerComponents,
+                relicFamily: String(relicComponents.family ?? 'fire'),
+                relicId: String(relicComponents.relicId ?? `server-relic-${relic.id}`),
+                relicPower: Number(towerComponents.relicPower ?? 0) + Number(relicComponents.power ?? 0.5),
+                relicStacks: Number(towerComponents.relicStacks ?? 0) + 1
+            } } })
             this.removeEntity(relic.id)
             return true
         }
@@ -673,5 +691,10 @@ export class PathwardenWorld {
 
     private validateTargeting(command: Extract<PathwardenInputCommand, { type: 'set-targeting' }>) {
         return this.state.phase === 'planning' && this.entities.get(command.id)?.data.type === 1
+    }
+
+    private validateRelicBinding(command: Extract<PathwardenInputCommand, { type: 'bind-relic' }>) {
+        if (this.state.phase !== 'planning') return false
+        return this.entities.get(command.towerId)?.data.type === 1 && this.entities.get(command.instanceId)?.data.type === 5
     }
 }

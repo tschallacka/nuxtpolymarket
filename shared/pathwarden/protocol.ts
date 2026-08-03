@@ -71,6 +71,7 @@ export type PathwardenInputCommand =
     | { type: 'continue-checkpoint' }
     | { type: 'claim-path', choice: number }
     | { type: 'sell-relic', instanceId: number }
+    | { type: 'bind-relic', towerId: number, instanceId: number }
     | { type: 'checkpoint-choice', choice: number }
     | { type: 'relic-choice', choice: number }
 
@@ -451,7 +452,7 @@ export function encodeInputCommand(inputSequence: number, command: PathwardenInp
     const payload = new ByteWriter()
     payload.varUint(inputSequence)
     payload.varUint(desiredTick)
-    const type = command.type === 'pause' ? 1 : command.type === 'start-wave' ? 2 : command.type === 'select-tower' ? 3 : command.type === 'place-tower' ? 4 : command.type === 'upgrade-tower' ? 5 : command.type === 'fuse-tower' ? 6 : command.type === 'salvage-tower' ? 7 : command.type === 'move-tower' ? 8 : command.type === 'set-targeting' ? 9 : command.type === 'continue-checkpoint' ? 10 : command.type === 'claim-path' ? 11 : command.type === 'sell-relic' ? 12 : command.type === 'checkpoint-choice' ? 13 : 14
+    const type = command.type === 'pause' ? 1 : command.type === 'start-wave' ? 2 : command.type === 'select-tower' ? 3 : command.type === 'place-tower' ? 4 : command.type === 'upgrade-tower' ? 5 : command.type === 'fuse-tower' ? 6 : command.type === 'salvage-tower' ? 7 : command.type === 'move-tower' ? 8 : command.type === 'set-targeting' ? 9 : command.type === 'continue-checkpoint' ? 10 : command.type === 'claim-path' ? 11 : command.type === 'sell-relic' ? 12 : command.type === 'bind-relic' ? 13 : command.type === 'checkpoint-choice' ? 14 : 15
     payload.u8(type)
     if (command.type === 'pause') payload.bool(command.value)
     if (command.type === 'select-tower') payload.string(command.tower, 32)
@@ -475,6 +476,10 @@ export function encodeInputCommand(inputSequence: number, command: PathwardenInp
     }
     if (command.type === 'claim-path') payload.varUint(command.choice)
     if (command.type === 'sell-relic') payload.varUint(command.instanceId)
+    if (command.type === 'bind-relic') {
+        payload.varUint(command.towerId)
+        payload.varUint(command.instanceId)
+    }
     if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') payload.varUint(command.choice)
     return encodePacket({ kind: PathwardenPacketKind.InputCommand, flags: 0, schema: 1, sequence: inputSequence, tick: desiredTick, acknowledgedInput: 0 }, payload.finish())
 }
@@ -533,9 +538,11 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
                                                 ? { inputSequence, desiredTick, command: { type: 'claim-path', choice: payloadReader.varUint() } }
                                                 : type === 12
                                                     ? { inputSequence, desiredTick, command: { type: 'sell-relic', instanceId: payloadReader.varUint() } }
-                                                    : type === 13
+                                                : type === 13
+                                                    ? { inputSequence, desiredTick, command: { type: 'bind-relic', towerId: payloadReader.varUint(), instanceId: payloadReader.varUint() } }
+                                                    : type === 14
                             ? { inputSequence, desiredTick, command: { type: 'checkpoint-choice', choice: payloadReader.varUint() } }
-                            : type === 14
+                            : type === 15
                                 ? { inputSequence, desiredTick, command: { type: 'relic-choice', choice: payloadReader.varUint() } }
                         : null
     } else if (header.kind === PathwardenPacketKind.CommandAck || header.kind === PathwardenPacketKind.CommandReject) {

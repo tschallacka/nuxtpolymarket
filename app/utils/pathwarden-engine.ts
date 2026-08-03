@@ -1267,8 +1267,10 @@ export class PathwardenEngine {
         merges: 0,
         recoil: 0,
         targeting: 'first',
-        relicStacks: 0,
-        relicPower: 0,
+        relicFamily: components.relicFamily as PathwardenRelicFamily | undefined,
+        relicId: components.relicId ? String(components.relicId) : undefined,
+        relicStacks: Number(components.relicStacks ?? 0),
+        relicPower: Number(components.relicPower ?? 0),
         relicShots: 0
       }
     })
@@ -2181,6 +2183,7 @@ export class PathwardenEngine {
       this.callbacks.onOpenArcanistWorkbench?.(this.relicSwapPreview(tower, relic))
       return
     }
+    this.callbacks.onCommand?.({ type: 'bind-relic', towerId: tower.id, instanceId: relic.instanceId })
     tower.relicFamily = relic.family
     tower.relicId = relic.id
     tower.relicStacks++
