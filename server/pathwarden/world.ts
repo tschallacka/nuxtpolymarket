@@ -396,6 +396,7 @@ export class PathwardenWorld {
             this.updateEntity(enemy.id, { x: progress * 100, y: progress * 100, data: { type: 2, components: { ...components, progress } } })
         }
         this.simulateTowers()
+        this.simulateProjectiles()
         if (this.spawnRemaining === 0 && !this.getEntities().some(entity => entity.data.type === 2)) {
             this.state.aether += 20 + this.state.wave * 4
             this.state.score += 100 * this.state.wave
@@ -436,13 +437,38 @@ export class PathwardenWorld {
                 continue
             }
             const target = enemies[0]!
-            const hp = Number(target.data.components?.hp ?? 1) - this.towerDamage(String(components.towerType ?? 'bolt'))
             this.updateEntity(tower.id, { data: { type: 1, components: { ...components, cooldown: 8 } } })
-            if (hp <= 0) {
-                this.removeEntity(target.id)
-                this.state.score += 10
+            this.spawnEntity({ type: 3, components: {
+                sourceId: tower.id,
+                targetId: target.id,
+                damage: this.towerDamage(String(components.towerType ?? 'bolt')),
+                progress: 0
+            } }, tower.x, tower.y, 0, target.x, target.y)
+        }
+    }
+
+    private simulateProjectiles() {
+        for (const projectile of this.getEntities().filter(entity => entity.data.type === 3)) {
+            const components = projectile.data.components ?? {}
+            const target = this.entities.get(Number(components.targetId))
+            if (!target || target.data.type !== 2) {
+                this.removeEntity(projectile.id)
+                continue
+            }
+            const progress = Number(components.progress ?? 0) + 0.25
+            const nextX = projectile.x + (target.x - projectile.x) * 0.25
+            const nextY = projectile.y + (target.y - projectile.y) * 0.25
+            if (progress >= 1) {
+                const hp = Number(target.data.components?.hp ?? 1) - Number(components.damage ?? 1)
+                this.removeEntity(projectile.id)
+                if (hp <= 0) {
+                    this.removeEntity(target.id)
+                    this.state.score += 10
+                } else {
+                    this.updateEntity(target.id, { data: { type: 2, components: { ...target.data.components, hp } } })
+                }
             } else {
-                this.updateEntity(target.id, { data: { type: 2, components: { ...target.data.components, hp } } })
+                this.updateEntity(projectile.id, { x: nextX, y: nextY, data: { type: 3, components: { ...components, progress } } })
             }
         }
     }
@@ -494,7 +520,10 @@ export class PathwardenWorld {
         if (this.state.phase !== 'planning') return false
         const tower = this.entities.get(command.id)
         if (!tower || tower.data.type !== 1) return false
-        return this.validatePlacement({ type: 'place-tower', col: command.col, row: command.row }).allowed
+        const key = this.cellKey(command.col, command.row)
+        return this.revealed.has(key)
+            && !this.reservedRoads.has(key)
+            && !this.getEntities().some(entity => entity.id !== command.id && entity.data.type === 1 && entity.data.components?.col === command.col && entity.data.components?.row === command.row)
     }
 
     private validateTargeting(command: Extract<PathwardenInputCommand, { type: 'set-targeting' }>) {

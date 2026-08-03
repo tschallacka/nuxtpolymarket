@@ -1293,7 +1293,31 @@ export class PathwardenEngine {
         dotTick: 0
       }
     })
-    this.projectiles = []
+    this.projectiles = entities.filter(entity => entity.type === 3).map(entity => {
+      const components = entity.components ?? {}
+      const type = String(components.towerType ?? 'bolt')
+      return {
+        type,
+        targetPosition: { x: entity.v1, y: entity.v2 },
+        relicPower: 0,
+        echo: false,
+        targetId: Number(components.targetId ?? 0),
+        x: entity.x,
+        y: entity.y,
+        damage: Number(components.damage ?? 1),
+        speed: 1,
+        splash: 0,
+        splashFactor: 0,
+        slow: 0,
+        color: towerStats(type).color,
+        size: 4,
+        trail: [],
+        origin: { x: entity.x, y: entity.y },
+        age: Number(components.progress ?? 0),
+        duration: 1,
+        arcHeight: 0
+      }
+    })
     this.emitState()
   }
 
