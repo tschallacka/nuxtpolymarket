@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '#server/database'
 import { pathwardenRuns, pathwardenState } from '#server/database/schema'
 import { requireUserId } from '#server/utils/auth'
+import { flushPathwardenSessionForUser } from '#server/pathwarden/session'
 import { credit } from '#server/utils/balance'
 import { getLockedPathwardenState } from '#server/utils/pathwarden'
 import {
@@ -12,6 +13,7 @@ import {
 
 export default defineEventHandler(async (event) => {
     const userId = await requireUserId(event)
+    await flushPathwardenSessionForUser(userId)
     const body = await readBody<{ wave?: number }>(event)
     const wave = Math.floor(Number(body.wave) || 0)
     if (!PATHWARDEN_CHECKPOINT_WAVES.includes(wave as 4 | 8 | 12)) {
