@@ -70,6 +70,8 @@ export interface PathwardenEntityDelta {
     removed: number[]
 }
 
+export type PathwardenRelicSwapFocus = 'binding' | 'preservation' | 'both'
+
 export interface PathwardenMapStateDelta {
     claimedRoomIds: string[]
     revealedCells: Array<{ col: number, row: number }>
@@ -109,6 +111,7 @@ export type PathwardenInputCommand =
     | { type: 'claim-path', choice: number, offerRevision?: number }
     | { type: 'sell-relic', instanceId: number }
     | { type: 'bind-relic', towerId: number, instanceId: number }
+    | { type: 'rebind-relic', towerId: number, instanceId: number, amount: number, focus: PathwardenRelicSwapFocus }
     | { type: 'checkpoint-choice', choice: number, offerRevision?: number }
     | { type: 'relic-choice', choice: number, offerRevision?: number }
 
@@ -552,7 +555,7 @@ export function encodeInputCommand(inputSequence: number, command: PathwardenInp
     const payload = new ByteWriter()
     payload.varUint(inputSequence)
     payload.varUint(desiredTick)
-    const type = command.type === 'pause' ? 1 : command.type === 'start-wave' ? 2 : command.type === 'select-tower' ? 3 : command.type === 'place-tower' ? 4 : command.type === 'upgrade-tower' ? 5 : command.type === 'fuse-tower' ? 6 : command.type === 'salvage-tower' ? 7 : command.type === 'move-tower' ? 8 : command.type === 'set-targeting' ? 9 : command.type === 'continue-checkpoint' ? 10 : command.type === 'claim-path' ? 11 : command.type === 'sell-relic' ? 12 : command.type === 'bind-relic' ? 13 : command.type === 'checkpoint-choice' ? 14 : 15
+    const type = command.type === 'pause' ? 1 : command.type === 'start-wave' ? 2 : command.type === 'select-tower' ? 3 : command.type === 'place-tower' ? 4 : command.type === 'upgrade-tower' ? 5 : command.type === 'fuse-tower' ? 6 : command.type === 'salvage-tower' ? 7 : command.type === 'move-tower' ? 8 : command.type === 'set-targeting' ? 9 : command.type === 'continue-checkpoint' ? 10 : command.type === 'claim-path' ? 11 : command.type === 'sell-relic' ? 12 : command.type === 'bind-relic' ? 13 : command.type === 'checkpoint-choice' ? 14 : command.type === 'relic-choice' ? 15 : 16
     payload.u8(type)
     if (command.type === 'pause') payload.bool(command.value)
     if (command.type === 'select-tower') payload.string(command.tower, 32)
@@ -582,6 +585,12 @@ export function encodeInputCommand(inputSequence: number, command: PathwardenInp
     if (command.type === 'bind-relic') {
         payload.varUint(command.towerId)
         payload.varUint(command.instanceId)
+    }
+    if (command.type === 'rebind-relic') {
+        payload.varUint(command.towerId)
+        payload.varUint(command.instanceId)
+        payload.varUint(command.amount)
+        payload.u8(command.focus === 'binding' ? 1 : command.focus === 'preservation' ? 2 : 3)
     }
     if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
         payload.varUint(command.choice)
@@ -650,6 +659,8 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
                                                     ? { inputSequence, desiredTick, command: { type: 'sell-relic', instanceId: payloadReader.varUint() } }
                                                 : type === 13
                                                     ? { inputSequence, desiredTick, command: { type: 'bind-relic', towerId: payloadReader.varUint(), instanceId: payloadReader.varUint() } }
+                                                    : type === 16
+                                                        ? { inputSequence, desiredTick, command: { type: 'rebind-relic', towerId: payloadReader.varUint(), instanceId: payloadReader.varUint(), amount: payloadReader.varUint(), focus: (['binding', 'preservation', 'both'] as const)[payloadReader.u8() - 1] ?? 'both' } }
                                                     : type === 14
                             ? { inputSequence, desiredTick, command: { type: 'checkpoint-choice', choice: payloadReader.varUint(), offerRevision: payloadReader.varUint() } }
                             : type === 15

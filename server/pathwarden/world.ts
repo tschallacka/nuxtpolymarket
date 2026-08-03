@@ -59,6 +59,12 @@ function initialPhase(state: PathwardenGameState | null): PathwardenPhase {
         : 'planning'
 }
 
+function deterministicUnit(seed: number, tick: number, index: number) {
+    let value = (seed ^ Math.imul(tick + 1, 0x45d9f3b) ^ Math.imul(index + 1, 0x27d4eb2d)) >>> 0
+    value = Math.imul(value ^ (value >>> 16), 0x85ebca6b) >>> 0
+    return ((value ^ (value >>> 13)) >>> 0) / 0x100000000
+}
+
 export class PathwardenWorld {
     private readonly commands: QueuedCommand[] = []
     private readonly entities = new Map<number, PathwardenEntity>()
@@ -255,6 +261,7 @@ export class PathwardenWorld {
         if (command.type === 'claim-path') return this.state.phase === 'path' && this.choiceKind === 'path' && command.offerRevision === this.choiceRevision && this.choices.includes(command.choice)
         if (command.type === 'sell-relic') return this.state.phase !== 'wave' && this.state.phase !== 'checkpoint' && this.entities.get(command.instanceId)?.data.type === 5
         if (command.type === 'bind-relic') return this.validateRelicBinding(command)
+        if (command.type === 'rebind-relic') return this.validateRelicRebinding(command)
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
         if (command.type === 'checkpoint-choice') return this.choiceKind === 'checkpoint' && command.offerRevision === this.choiceRevision && this.choices.includes(command.choice)
@@ -569,6 +576,43 @@ export class PathwardenWorld {
                 relicStacks: Number(towerComponents.relicStacks ?? 0) + 1
             } } })
             this.removeEntity(relic.id)
+            return true
+        }
+        if (command.type === 'rebind-relic') {
+            const tower = this.entities.get(command.towerId)!
+            const relic = this.entities.get(command.instanceId)!
+            const towerComponents = tower.data.components ?? {}
+            const relicComponents = relic.data.components ?? {}
+            const oldStacks = Math.max(1, Math.floor(Number(towerComponents.relicStacks ?? 1)))
+            const focusBonus = command.focus === 'binding' ? 0.08 : command.focus === 'preservation' ? 0.08 : 0.04
+            const preserveChance = Math.min(0.98, 0.35 + this.boosts.arcanistLevel * 0.04 + focusBonus + Math.min(0.25, command.amount * 0.001))
+            const preserved = Array.from({ length: oldStacks }, (_, index) => index)
+                .filter(index => deterministicUnit(this.state.seed, this.state.tick, tower.id + index) < preserveChance)
+            const oldFamily = String(towerComponents.relicFamily ?? 'fire')
+            const oldRelicId = String(towerComponents.relicId ?? `server-relic-${tower.id}`)
+            const oldPower = Number(towerComponents.relicPower ?? 0) / oldStacks
+            for (const index of preserved) this.spawnRelic({
+                instanceId: this.nextRelicInstanceId++,
+                id: `${oldRelicId}-recovered-${this.state.tick}-${index}`,
+                family: oldFamily as PathwardenSavedRelic['family'],
+                rarity: 'common',
+                name: 'Recovered relic',
+                description: 'A relic recovered by the server-authoritative Arcanist ritual.',
+                towerSpecific: false,
+                iconIndex: 0,
+                power: oldPower,
+                sellValue: 15,
+                color: '#c4b5fd'
+            })
+            this.state.aether -= Math.max(0, Math.floor(command.amount))
+            this.removeEntity(relic.id)
+            this.updateEntity(tower.id, { data: { type: 1, components: {
+                ...towerComponents,
+                relicFamily: String(relicComponents.family ?? 'fire'),
+                relicId: String(relicComponents.relicId ?? `server-relic-${relic.id}`),
+                relicPower: Number(relicComponents.power ?? 0.5),
+                relicStacks: 1
+            } } })
             return true
         }
         if (command.type === 'checkpoint-choice' || command.type === 'relic-choice') {
@@ -989,6 +1033,13 @@ export class PathwardenWorld {
     private validateRelicBinding(command: Extract<PathwardenInputCommand, { type: 'bind-relic' }>) {
         if (this.state.phase !== 'planning') return false
         return this.entities.get(command.towerId)?.data.type === 1 && this.entities.get(command.instanceId)?.data.type === 5
+    }
+
+    private validateRelicRebinding(command: Extract<PathwardenInputCommand, { type: 'rebind-relic' }>) {
+        if (this.state.phase !== 'planning' || !Number.isSafeInteger(command.amount) || command.amount < 0 || command.amount > this.state.aether) return false
+        const tower = this.entities.get(command.towerId)
+        const relic = this.entities.get(command.instanceId)
+        return Boolean(tower?.data.type === 1 && tower.data.components?.relicFamily && relic?.data.type === 5)
     }
 
     private towerCost(towerType: string) {

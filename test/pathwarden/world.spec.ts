@@ -196,6 +196,30 @@ describe('Pathwarden authoritative world', () => {
         expect(world.getEntities().some(entity => entity.id === relicId)).toBe(false)
     })
 
+    it('resolves live relic rebinding on the authoritative tick', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-7b', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null, boosts: {
+            startingLives: 20,
+            startingAether: 205,
+            damageMultiplier: 1,
+            rangeMultiplier: 1,
+            rateMultiplier: 1,
+            bountyMultiplier: 1,
+            arcanistLevel: 3
+        } })
+        const towerId = world.spawnEntity({ type: 1, components: { towerType: 'bolt', col: 10, row: 10, relicFamily: 'fire', relicId: 'fire-common', relicStacks: 2, relicPower: 2 } }, 10, 10)
+        const relicId = world.spawnEntity({ type: 5, components: { instanceId: 8, relicId: 'frost-common', family: 'frost', power: 1, sellValue: 15 } }, 0, 0)
+        world.enqueue(1, { type: 'rebind-relic', towerId, instanceId: relicId, amount: 40, focus: 'preservation' })
+        world.start()
+        vi.advanceTimersByTime(50)
+        world.stop()
+
+        const tower = world.getEntities().find(entity => entity.id === towerId)!
+        expect(tower.data.components).toMatchObject({ relicFamily: 'frost', relicId: 'frost-common', relicStacks: 1, relicPower: 1 })
+        expect(world.getEntities().some(entity => entity.id === relicId)).toBe(false)
+        expect(world.getSnapshot().aether).toBe(165)
+    })
+
     it('scales repeated tower purchases and refunds half the investment', () => {
         vi.useFakeTimers()
         const world = new PathwardenWorld({ runId: 'run-8', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })

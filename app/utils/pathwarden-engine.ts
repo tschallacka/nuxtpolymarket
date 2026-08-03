@@ -2282,6 +2282,12 @@ export class PathwardenEngine {
   }
 
   resolveRelicSwap(towerId: number, relicInstanceId: number, investment: PathwardenRelicSwapInvestment = { amount: 0, focus: 'both', bonus: 0 }): PathwardenRelicSwapResult | null {
+    if (this.serverAuthoritative) {
+      this.callbacks.onCommand?.({ type: 'rebind-relic', towerId, instanceId: relicInstanceId, amount: Math.max(0, Math.floor(investment.amount)), focus: investment.focus })
+      this.message = 'Arcanist ritual command sent to the Warden.'
+      this.emitState()
+      return null
+    }
     if (this.phase !== 'planning') return null
     const tower = this.towers.find(candidate => candidate.id === towerId)
     const relic = this.relicInventory.find(candidate => candidate.instanceId === relicInstanceId)
