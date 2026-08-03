@@ -2,7 +2,7 @@ import { eq, sql } from 'drizzle-orm'
 import { db } from '#server/database'
 import { pathwardenRuns, pathwardenState } from '#server/database/schema'
 import { requireUserId } from '#server/utils/auth'
-import { flushPathwardenSessionForUser } from '#server/pathwarden/session'
+import { closePathwardenSessionsForUser } from '#server/pathwarden/session'
 import { credit } from '#server/utils/balance'
 import {
     getLockedPathwardenState,
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     if (!reason || !['cashout', 'victory', 'defeat'].includes(reason)) {
         throw createError({ statusCode: 400, statusMessage: 'Invalid run result' })
     }
-    await flushPathwardenSessionForUser(userId)
+    await closePathwardenSessionsForUser(userId, 4001, 'Pathwarden run settled')
 
     return db.transaction(async (tx) => {
         const state = await getLockedPathwardenState(tx, userId)

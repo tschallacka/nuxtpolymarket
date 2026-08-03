@@ -170,6 +170,23 @@ export async function flushPathwardenSessionForUser(userId: string) {
     if (active.persistPromise) await active.persistPromise
 }
 
+export async function closePathwardenSessionsForUser(userId: string, code = 4000, reason = 'Pathwarden session ended') {
+    const active = [...sessions.values()].filter(session => session.userId === userId)
+    for (const session of active) {
+        session.lastPersistedTick = -1
+        persistWorld(session, session.world.getSnapshot().tick, true)
+        if (session.persistPromise) await session.persistPromise
+        session.world.stop()
+        sessions.delete(session.runId)
+        pathwardenMetricDisconnection()
+        try {
+            session.peer.close(code, reason)
+        } catch {
+            // The peer may already be closed; the server session is still gone.
+        }
+    }
+}
+
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
     if (inputSequence <= session.world.lastAppliedInput) {
         pathwardenMetricCommand(true)

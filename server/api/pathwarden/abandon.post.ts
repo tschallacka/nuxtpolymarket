@@ -5,14 +5,14 @@ import { requireUserId } from '#server/utils/auth'
 import { debit, debitGems } from '#server/utils/balance'
 import { getGemGuidePrice } from '#server/utils/gem-exchange'
 import { getLockedPathwardenState } from '#server/utils/pathwarden'
-import { flushPathwardenSessionForUser } from '#server/pathwarden/session'
+import { closePathwardenSessionsForUser } from '#server/pathwarden/session'
 import { PATHWARDEN_ABANDON_COST_GEMS } from '#shared/utils/gamelogic/pathwarden'
 
 const STRATEGIC_PHASES = new Set(['planning', 'checkpoint', 'path', 'upgrade'])
 
 export default defineEventHandler(async (event) => {
     const userId = await requireUserId(event)
-    await flushPathwardenSessionForUser(userId)
+    await closePathwardenSessionsForUser(userId, 4002, 'Pathwarden run abandoned')
     const body = await readBody<{ currency?: 'gems' | 'coins' }>(event)
     if (body.currency !== 'gems' && body.currency !== 'coins') {
         throw createError({ statusCode: 400, statusMessage: 'Choose Gems or Coins for the retreat' })
