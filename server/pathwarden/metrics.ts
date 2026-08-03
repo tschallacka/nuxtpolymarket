@@ -31,7 +31,7 @@ const metrics: PathwardenRuntimeMetrics = {
 export function pathwardenMetricConnection(replaced: boolean) {
     metrics.connections++
     if (replaced) metrics.reconnects++
-    if (!replaced) metrics.activeSessions++
+    metrics.activeSessions++
 }
 
 export function pathwardenMetricDisconnection() {

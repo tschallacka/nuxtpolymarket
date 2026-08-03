@@ -50,7 +50,13 @@ function send(session: ActiveSession, payload: ArrayBuffer) {
         session.peer.send(payload)
         pathwardenMetricPacket('out', payload.byteLength)
     } catch {
-        sessions.delete(session.runId)
+        if (sessions.get(session.runId) === session) {
+            session.world.stop()
+            session.lastPersistedTick = -1
+            persistWorld(session, session.world.getSnapshot().tick, true)
+            sessions.delete(session.runId)
+            pathwardenMetricDisconnection()
+        }
     }
 }
 
@@ -157,7 +163,12 @@ export async function openPathwardenSession(peer: Peer) {
     const previous = sessions.get(session.runId)
     pathwardenMetricConnection(Boolean(previous))
     previous?.peer.close(4009, 'Replaced by a newer Pathwarden session')
-    previous?.world.stop()
+    if (previous) {
+        previous.world.stop()
+        previous.lastPersistedTick = -1
+        persistWorld(previous, previous.world.getSnapshot().tick, true)
+        pathwardenMetricDisconnection()
+    }
     session.world.setChangeHandler((snapshot, entities) => {
         send(session, encodeEntitySnapshot(entities.map(entity => ({
             id: entity.id,
@@ -222,6 +233,8 @@ export function closePathwardenSession(peer: Peer) {
     for (const [runId, session] of sessions) {
         if (session.peer === peer) {
             session.world.stop()
+            session.lastPersistedTick = -1
+            persistWorld(session, session.world.getSnapshot().tick, true)
             pathwardenMetricDisconnection()
             void session.persistPromise
             sessions.delete(runId)
