@@ -1,4 +1,5 @@
-import type { PathwardenGameState } from '#shared/types/pathwarden-save'
+import type { PathwardenGameState, PathwardenMapPlan } from '#shared/types/pathwarden-save'
+import { PATHWARDEN_DEFENSE_BLUEPRINTS } from '#shared/utils/gamelogic/pathwarden'
 import type {
     PathwardenInputCommand,
     PathwardenPhase,
@@ -10,6 +11,7 @@ export interface PathwardenWorldSource {
     revision: number
     realm: number
     seed: number
+    mapPlan: PathwardenMapPlan
     gameState: PathwardenGameState | null
 }
 
@@ -46,13 +48,37 @@ function initialPhase(state: PathwardenGameState | null): PathwardenPhase {
 export class PathwardenWorld {
     private readonly commands: QueuedCommand[] = []
     private readonly entities = new Map<number, PathwardenEntity>()
+    private readonly mapPlan: PathwardenMapPlan
+    private readonly revealed = new Set<string>()
+    private readonly reservedRoads = new Set<string>()
     private readonly state: PathwardenWorldSnapshot
     private timer: ReturnType<typeof setInterval> | null = null
     private lastInputSequence = 0
     private nextEntityId = 1
+    private selectedTower = 'bolt'
     private onChange: (snapshot: PathwardenWorldSnapshot) => void = () => {}
 
     constructor(source: PathwardenWorldSource) {
+        this.mapPlan = source.mapPlan
+        const claimed = new Set(source.gameState?.claimedRoomIds ?? [])
+        const castle = this.mapPlan.rooms.find(room => room.id === this.mapPlan.castleRoomId)
+        for (const room of this.mapPlan.rooms) {
+            if (room.id === this.mapPlan.castleRoomId || claimed.has(room.id)) {
+                for (const cell of [...room.revealCells, ...room.roadCells]) {
+                    for (let colOffset = -2; colOffset <= 2; colOffset++) {
+                        for (let rowOffset = -2; rowOffset <= 2; rowOffset++) {
+                            const col = cell.col + colOffset
+                            const row = cell.row + rowOffset
+                            if (col >= 0 && row >= 0 && col < this.mapPlan.size.cols && row < this.mapPlan.size.rows) {
+                                this.revealed.add(this.cellKey(col, row))
+                            }
+                        }
+                    }
+                }
+                for (const cell of room.roadCells) this.reservedRoads.add(this.cellKey(cell.col, cell.row))
+            }
+        }
+        if (castle) for (const cell of castle.roadCells) this.reservedRoads.add(this.cellKey(cell.col, cell.row))
         this.state = {
             runId: source.runId,
             revision: source.revision,
@@ -65,7 +91,10 @@ export class PathwardenWorld {
             aether: Math.max(0, source.gameState?.aether ?? 205),
             score: Math.max(0, source.gameState?.score ?? 0),
             paused: source.gameState?.paused === true,
-            entityCount: (source.gameState?.towers?.length ?? 0) + (source.gameState?.enemies?.length ?? 0)
+            entityCount: 0
+        }
+        for (const tower of source.gameState?.towers ?? []) {
+            this.spawnEntity({ type: 1, components: { towerType: tower.type, col: tower.col, row: tower.row, invested: tower.invested } }, tower.col, tower.row)
         }
     }
 
@@ -91,10 +120,10 @@ export class PathwardenWorld {
     }
 
     canApply(command: PathwardenInputCommand) {
-        if (command.type === 'place-tower') return false
+        if (command.type === 'place-tower') return this.validatePlacement(command).allowed
         if (command.type === 'pause') return !['victory', 'defeat', 'cashout'].includes(this.state.phase)
         if (command.type === 'start-wave') return this.state.phase === 'planning' && this.state.wave < 12
-        return command.type === 'select-tower'
+        return command.type === 'select-tower' && PATHWARDEN_DEFENSE_BLUEPRINTS.some(defense => defense.id === command.tower)
     }
 
     getSnapshot() {
@@ -173,6 +202,43 @@ export class PathwardenWorld {
             this.state.wave = Math.min(12, this.state.wave + 1)
             return true
         }
-        return command.type === 'select-tower'
+        if (command.type === 'select-tower') {
+            this.selectedTower = command.tower
+            return true
+        }
+        const placement = this.validatePlacement(command)
+        if (!placement.allowed) return false
+        const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === this.selectedTower)!
+        const cost = placement.cost ?? 0
+        this.state.aether -= cost
+        this.spawnEntity({
+            type: 1,
+            components: {
+                towerType: this.selectedTower,
+                col: command.col,
+                row: command.row,
+                invested: cost,
+                targeting: 'first'
+            }
+        }, command.col, command.row)
+        return Boolean(defense)
+    }
+
+    private cellKey(col: number, row: number) {
+        return `${col}:${row}`
+    }
+
+    private validatePlacement(command: Extract<PathwardenInputCommand, { type: 'place-tower' }>) {
+        const key = this.cellKey(command.col, command.row)
+        const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === this.selectedTower)
+        if (this.state.phase !== 'planning') return { allowed: false, reason: 'Towers can only be placed during planning.' }
+        if (!defense) return { allowed: false, reason: 'Unknown defense blueprint.' }
+        if (!this.revealed.has(key)) return { allowed: false, reason: 'The mist still covers that ground.' }
+        if (this.reservedRoads.has(key)) return { allowed: false, reason: 'Defenses cannot be built on the road.' }
+        if (this.getEntities().some(entity => entity.data.type === 1 && entity.data.components?.col === command.col && entity.data.components?.row === command.row)) {
+            return { allowed: false, reason: 'That ground already holds a defense.' }
+        }
+        if (this.state.aether < defense.aetherCost) return { allowed: false, reason: 'Not enough Aether.' }
+        return { allowed: true, cost: defense.aetherCost }
     }
 }

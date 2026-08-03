@@ -58,6 +58,7 @@ async function createSession(peer: Peer): Promise<ActiveSession | null> {
         revision: run.revision,
         realm: run.realm,
         seed: Number(run.seed) >>> 0,
+        mapPlan: run.mapPlan,
         gameState: run.gameState ?? null
     })
     return { peer, userId, runId, nextPacketSequence: 1, mapPlan: run.mapPlan, world }

@@ -46,7 +46,7 @@ export interface PathwardenWorldSnapshot {
 export type PathwardenInputCommand =
     | { type: 'pause', value: boolean }
     | { type: 'start-wave' }
-    | { type: 'select-tower', tower: number }
+    | { type: 'select-tower', tower: string }
     | { type: 'place-tower', col: number, row: number }
 
 export interface PathwardenDecodedPacket {
@@ -401,7 +401,7 @@ export function encodeInputCommand(inputSequence: number, command: PathwardenInp
     const type = command.type === 'pause' ? 1 : command.type === 'start-wave' ? 2 : command.type === 'select-tower' ? 3 : 4
     payload.u8(type)
     if (command.type === 'pause') payload.bool(command.value)
-    if (command.type === 'select-tower') payload.u8(command.tower)
+    if (command.type === 'select-tower') payload.string(command.tower, 32)
     if (command.type === 'place-tower') {
         payload.u16(command.col)
         payload.u16(command.row)
@@ -443,7 +443,7 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
             : type === 2
                 ? { inputSequence, desiredTick, command: { type: 'start-wave' } }
                 : type === 3
-                    ? { inputSequence, desiredTick, command: { type: 'select-tower', tower: payloadReader.u8() } }
+                    ? { inputSequence, desiredTick, command: { type: 'select-tower', tower: payloadReader.string(32) } }
                     : type === 4
                         ? { inputSequence, desiredTick, command: { type: 'place-tower', col: payloadReader.u16(), row: payloadReader.u16() } }
                         : null

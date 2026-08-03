@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PathwardenWorld } from '#server/pathwarden/world'
+import { createPathwardenMapPlan } from '#shared/utils/gamelogic/pathwarden-map'
+
+const mapPlan = createPathwardenMapPlan({ seed: 1, realm: 1 })
 
 afterEach(() => {
     vi.useRealTimers()
@@ -14,6 +17,7 @@ describe('Pathwarden authoritative world', () => {
             revision: 0,
             realm: 1,
             seed: 12,
+            mapPlan,
             gameState: null
         })
         world.setChangeHandler(snapshot => changes.push(snapshot.tick))
@@ -36,6 +40,7 @@ describe('Pathwarden authoritative world', () => {
             revision: 4,
             realm: 2,
             seed: 99,
+            mapPlan,
             gameState: {
                 phase: 'planning',
                 paused: true,
@@ -73,7 +78,7 @@ describe('Pathwarden authoritative world', () => {
     })
 
     it('rejects commands outside the current phase before queueing them', () => {
-        const world = new PathwardenWorld({ runId: 'run-3', revision: 0, realm: 1, seed: 1, gameState: null })
+        const world = new PathwardenWorld({ runId: 'run-3', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
         expect(world.canApply({ type: 'place-tower', col: 1, row: 1 })).toBe(false)
         expect(world.canApply({ type: 'start-wave' })).toBe(true)
         world.enqueue(1, { type: 'start-wave' })
@@ -81,7 +86,7 @@ describe('Pathwarden authoritative world', () => {
     })
 
     it('allocates and owns entity lifecycle state through the world API', () => {
-        const world = new PathwardenWorld({ runId: 'run-4', revision: 0, realm: 1, seed: 1, gameState: null })
+        const world = new PathwardenWorld({ runId: 'run-4', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
         const first = world.spawnEntity({ type: 4, components: { health: 100 } }, 10, 20, 1, 2, 3, 4)
         const second = world.spawnEntity({ type: 5 }, 2, 3)
         expect(first).toBe(1)
@@ -91,5 +96,25 @@ describe('Pathwarden authoritative world', () => {
         expect(world.getEntities()[0]).toMatchObject({ id: 1, x: 11, data: { components: { health: 80 } } })
         expect(world.removeEntity(second)).toBe(true)
         expect(world.getSnapshot().entityCount).toBe(1)
+    })
+
+    it('validates and applies a server-owned tower placement', () => {
+        const world = new PathwardenWorld({ runId: 'run-5', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const road = mapPlan.rooms.find(room => room.id === mapPlan.castleRoomId)!.roadCells
+        const candidate = Array.from({ length: 5 }, (_, index) => ({ col: road[0]!.col + index - 2, row: road[0]!.row + 3 }))
+            .find(cell => world.canApply({ type: 'place-tower', ...cell }))
+        expect(candidate).toBeDefined()
+        expect(world.enqueue(1, { type: 'place-tower', ...candidate! })).toBe(true)
+        world.setChangeHandler(() => {})
+        // The fixed tick is the only mutation boundary.
+        world.start()
+        return new Promise<void>(resolve => {
+            setTimeout(() => {
+                world.stop()
+                expect(world.getSnapshot().entityCount).toBe(1)
+                expect(world.getSnapshot().aether).toBeLessThan(205)
+                resolve()
+            }, 55)
+        })
     })
 })
