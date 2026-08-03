@@ -200,4 +200,25 @@ describe('Pathwarden authoritative world', () => {
             .flatMap(room => room.roadCells)
         expect(roadCells).toContainEqual({ col: enemy!.x, row: enemy!.y })
     })
+
+    it('restores active combat entities and wave counters on reconnect', () => {
+        const source = new PathwardenWorld({ runId: 'run-10', revision: 2, realm: 1, seed: 1, mapPlan, gameState: null })
+        source.spawnEntity({ type: 1, components: { towerType: 'bolt', col: 10, row: 10, invested: 64, level: 2, targeting: 'strong' } }, 10, 10, 0, 0, 0, 0, 10)
+        source.spawnEntity({ type: 2, components: { enemyType: 'brute', progress: 0.4, hp: 80, maxHp: 120, reward: 9 } }, 0, 0, 0, 0, 0, 0, 20)
+        source.spawnEntity({ type: 3, components: { towerType: 'bolt', targetId: 20, damage: 32, progress: 0.5 } }, 4, 5, 0, 0, 0, 0, 30)
+        const saved = source.exportGameState()
+        saved.phase = 'wave'
+        saved.wave = 3
+        saved.spawnLeft = 4
+        saved.spawnTotal = 7
+        saved.spawnTimer = 2
+        saved.lastInputSequence = 12
+
+        const restored = new PathwardenWorld({ runId: 'run-10', revision: 3, realm: 1, seed: 1, mapPlan, gameState: saved })
+        expect(restored.getSnapshot()).toMatchObject({ phase: 'wave', wave: 3, entityCount: 3 })
+        expect(restored.lastAppliedInput).toBe(12)
+        expect(restored.getEntities().map(entity => entity.id)).toEqual(expect.arrayContaining([10, 20, 30]))
+        expect(restored.getEntities().find(entity => entity.id === 20)?.data.components).toMatchObject({ enemyType: 'brute', hp: 80 })
+        expect(restored.getEntities().find(entity => entity.id === 30)?.data.components).toMatchObject({ targetId: 20, damage: 32 })
+    })
 })

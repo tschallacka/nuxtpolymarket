@@ -112,6 +112,9 @@ export class PathwardenWorld {
         }
         this.lastInputSequence = Math.max(0, Math.floor(source.gameState?.lastInputSequence ?? 0))
         this.towerPurchases = { ...(source.gameState?.towerPurchases ?? {}) }
+        this.selectedTower = source.gameState?.selectedTower ?? 'bolt'
+        this.spawnRemaining = Math.max(0, Math.floor(source.gameState?.spawnLeft ?? 0))
+        this.spawnCooldown = Math.max(0, Math.floor(source.gameState?.spawnTimer ?? 0))
         if (this.state.phase === 'checkpoint') {
             this.choiceKind = 'checkpoint'
             this.choices = [0, 1, 2]
@@ -121,7 +124,37 @@ export class PathwardenWorld {
             this.openRelicChoice()
         }
         for (const tower of source.gameState?.towers ?? []) {
-            this.spawnEntity({ type: 1, components: { towerType: tower.type, col: tower.col, row: tower.row, invested: tower.invested } }, tower.col, tower.row)
+            this.spawnEntity({ type: 1, components: {
+                towerType: tower.type,
+                col: tower.col,
+                row: tower.row,
+                invested: tower.invested,
+                cooldown: tower.cooldown,
+                level: tower.level,
+                targeting: tower.targeting,
+                relicFamily: tower.relicFamily ?? '',
+                relicId: tower.relicId ?? '',
+                relicStacks: tower.relicStacks,
+                relicPower: tower.relicPower
+            } }, tower.col, tower.row, 0, 0, 0, 0, tower.id)
+        }
+        for (const enemy of source.gameState?.enemies ?? []) {
+            const position = this.routePosition(enemy.progress)
+            this.spawnEntity({ type: 2, components: {
+                enemyType: enemy.type,
+                progress: enemy.progress,
+                hp: enemy.hp,
+                maxHp: enemy.maxHp,
+                reward: enemy.reward
+            } }, position.col, position.row, 0, 0, 0, 0, enemy.id)
+        }
+        for (const projectile of source.gameState?.projectiles ?? []) {
+            this.spawnEntity({ type: 3, components: {
+                towerType: projectile.type,
+                targetId: projectile.targetId,
+                damage: projectile.damage,
+                progress: projectile.age
+            } }, projectile.x, projectile.y, 0, 0, 0, 0, projectile.id)
         }
         for (const relic of source.gameState?.relicInventory ?? []) this.spawnRelic(relic)
     }
@@ -184,10 +217,13 @@ export class PathwardenWorld {
         }
     }
 
-    spawnEntity(data: PathwardenEntityData, x: number, y: number, z = 0, v1 = 0, v2 = 0, v3 = 0) {
+    spawnEntity(data: PathwardenEntityData, x: number, y: number, z = 0, v1 = 0, v2 = 0, v3 = 0, entityId?: number) {
         if (!Number.isInteger(data.type) || data.type < 0 || data.type > 255) throw new Error('Invalid Pathwarden entity type')
+        const id = entityId ?? this.nextEntityId++
+        if (!Number.isSafeInteger(id) || id < 1 || this.entities.has(id)) throw new Error('Invalid or duplicate Pathwarden entity id')
+        this.nextEntityId = Math.max(this.nextEntityId, id + 1)
         const entity: PathwardenEntity = {
-            id: this.nextEntityId++,
+            id,
             data: { type: data.type, components: data.components ? { ...data.components } : undefined },
             x,
             y,
@@ -276,7 +312,7 @@ export class PathwardenWorld {
             enemies: entities.filter(entity => entity.data.type === 2).map(entity => ({
                 id: entity.id,
                 type: String(entity.data.components?.enemyType ?? 'raider'),
-                route: [],
+                route: this.enemyRoute(),
                 exitKey: 'castle-main',
                 progress: Number(entity.data.components?.progress ?? 0),
                 hp: Number(entity.data.components?.hp ?? 1),
@@ -291,7 +327,27 @@ export class PathwardenWorld {
                 dotTimer: 0,
                 dotTick: 0
             })),
-            projectiles: [],
+            projectiles: entities.filter(entity => entity.data.type === 3).map(entity => ({
+                id: entity.id,
+                type: String(entity.data.components?.towerType ?? 'bolt'),
+                targetId: Number(entity.data.components?.targetId ?? 0),
+                relicPower: 0,
+                echo: false,
+                x: entity.x,
+                y: entity.y,
+                damage: Number(entity.data.components?.damage ?? 1),
+                speed: 1,
+                splash: 0,
+                splashFactor: 0,
+                slow: 0,
+                color: 'primary',
+                size: 4,
+                trail: [],
+                origin: { col: entity.x, row: entity.y },
+                age: Number(entity.data.components?.progress ?? 0),
+                duration: 1,
+                arcHeight: 0
+            })),
             towerId: this.nextEntityId,
             enemyId: this.nextEntityId,
             relicInstanceId: this.nextRelicInstanceId,

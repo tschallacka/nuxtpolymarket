@@ -167,6 +167,7 @@ export interface PathwardenSavedEnemy {
 }
 
 export interface PathwardenSavedProjectile {
+    id?: number
     type: string
     relicFamily?: string
     relicPower: number
