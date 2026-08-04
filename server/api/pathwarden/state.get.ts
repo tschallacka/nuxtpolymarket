@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { db } from '#server/database'
-import { pathwardenState, user } from '#server/database/schema'
+import { pathwardenRuns, pathwardenState, user } from '#server/database/schema'
 import { requireUserId } from '#server/utils/auth'
 import { getBalance } from '#server/utils/balance'
 import { getGemGuidePrice } from '#server/utils/gem-exchange'
@@ -24,10 +24,11 @@ import {
 export default defineEventHandler(async (event) => {
     const userId = await requireUserId(event)
     const debugMode = import.meta.dev || Boolean(useRuntimeConfig(event).devMode)
-    const [balance, currentUser, existing, gemGuidePrice] = await Promise.all([
+    const [balance, currentUser, existing, existingRun, gemGuidePrice] = await Promise.all([
         getBalance(userId),
         db.query.user.findFirst({ where: eq(user.id, userId), columns: { gems: true } }),
         db.query.pathwardenState.findFirst({ where: eq(pathwardenState.userId, userId) }),
+        db.query.pathwardenRuns.findFirst({ where: eq(pathwardenRuns.userId, userId), columns: { id: true } }),
         getGemGuidePrice()
     ])
     const state = existing
@@ -75,6 +76,7 @@ export default defineEventHandler(async (event) => {
             : null,
         activeRun: state.runStartedAt
             ? {
+                id: existingRun?.id ?? null,
                 startedAt: state.runStartedAt,
                 realm: state.runRealmSnapshot,
                 surged: state.runSurgedSnapshot

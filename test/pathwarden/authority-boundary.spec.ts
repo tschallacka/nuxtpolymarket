@@ -6,10 +6,12 @@ const root = resolve(import.meta.dirname, '../..')
 const componentPath = resolve(root, 'app/components/games/PathwardenGame.client.vue')
 const enginePath = resolve(root, 'app/utils/pathwarden-engine.ts')
 const realtimePath = resolve(root, 'app/composables/pathwarden-realtime.ts')
+const statePath = resolve(root, 'server/api/pathwarden/state.get.ts')
 const debugClearCachePath = resolve(root, 'server/api/pathwarden/debug-clear-cache.post.ts')
 const componentSource = readFileSync(componentPath, 'utf8')
 const engineSource = readFileSync(enginePath, 'utf8')
 const realtimeSource = readFileSync(realtimePath, 'utf8')
+const stateSource = readFileSync(statePath, 'utf8')
 const debugClearCacheSource = readFileSync(debugClearCachePath, 'utf8')
 
 function filesUnder(directory: string): string[] {
@@ -23,6 +25,9 @@ describe('Pathwarden authority boundaries', () => {
     it('keeps server-only modules out of the renderer and removes client-authored saves', () => {
         expect(componentSource).not.toMatch(/#server\//)
         expect(componentSource).not.toMatch(/server\/pathwarden/)
+        expect(componentSource).not.toContain("$fetch('/api/pathwarden/run')")
+        expect(componentSource).toContain('boostState.value?.activeRun?.id')
+        expect(stateSource).toContain('pathwardenRuns')
         expect(existsSync(resolve(root, 'server/api/pathwarden/run.put.ts'))).toBe(false)
         expect(componentSource).not.toContain("method: 'PUT', body: { revision")
         expect(componentSource).not.toContain("'/api/pathwarden/ambient'")

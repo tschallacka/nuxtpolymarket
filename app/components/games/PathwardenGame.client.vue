@@ -11,7 +11,7 @@ import {
   type PathwardenTargeting,
   type PathwardenTowerType
 } from '~/utils/pathwarden-engine'
-import type { PathwardenGameState, PathwardenMapPlan } from '#shared/types/pathwarden-save'
+import type { PathwardenMapPlan } from '#shared/types/pathwarden-save'
 import { PathwardenGameplayEventType, type PathwardenInputCommand } from '#shared/pathwarden/protocol'
 import {
   PATHWARDEN_DEFENSE_BLUEPRINTS,
@@ -388,7 +388,6 @@ const savingKeyboardPan = ref(false)
 let engine: PathwardenEngine | null = null
 let unregisterDevBridge = () => {}
 let cooldownClock: ReturnType<typeof setInterval> | null = null
-let restoredRun: { mapPlan: PathwardenMapPlan, gameState: PathwardenGameState } | undefined
 let startingRun: Promise<boolean> | null = null
 
 const towerTypes = computed(() => (boostState.value?.defenses
@@ -552,7 +551,6 @@ async function clearDebugCache() {
     runActive.value = false
     activeRunId.value = null
     realtime.close()
-    restoredRun = undefined
     localStorage.removeItem('pathwarden-hints')
     hintsEnabled.value = true
     await refreshBoosts()
@@ -998,7 +996,7 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
     }
   }, boostState.value
     ? pathwardenBoostEffects(boostState.value.levels, useSurge.value)
-    : undefined, selectedRealm.value, boostState.value?.equippedSkinId ?? 'warden-stone', restore, skipIntro.value)
+    : undefined, selectedRealm.value, boostState.value?.equippedSkinId ?? 'warden-stone', restore, skipIntro.value || Boolean(activeRunId.value))
   engine.setKeyboardPan(keyboardPan.value)
   // The local engine is a renderer and presentation controller even before a
   // run exists. Gameplay commands must never fall back to a local simulation.
@@ -1039,21 +1037,14 @@ onMounted(async () => {
     nowMs.value = Date.now()
   }, 1000)
   hintsEnabled.value = localStorage.getItem('pathwarden-hints') !== 'off'
-  if (boostState.value?.activeRun) {
-    const response = await $fetch('/api/pathwarden/run')
-    if (response.run?.gameState) {
+  if (boostState.value?.activeRun?.id) {
       runActive.value = true
-      activeRunId.value = response.run.id
-      selectedRealm.value = response.run.realm
-      restoredRun = {
-        mapPlan: response.run.mapPlan,
-        gameState: response.run.gameState
-      }
-    }
+      activeRunId.value = boostState.value.activeRun.id
+      selectedRealm.value = boostState.value.activeRun.realm ?? selectedRealm.value
   }
   unlockedRealm.value = boostState.value?.progression.maxUnlockedRealm ?? 1
-  if (!restoredRun && skipIntro.value) await createFreshMapWithLoading()
-  else createGame(restoredRun)
+  if (!activeRunId.value && skipIntro.value) await createFreshMapWithLoading()
+  else createGame()
   if (activeRunId.value) realtime.connect(activeRunId.value)
   if (import.meta.dev) {
     const { registerPathwardenDevBridge } = await import('~/utils/pathwarden-dev-bridge')
