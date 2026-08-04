@@ -1290,7 +1290,7 @@ export class PathwardenEngine {
         id: String(components.relicId ?? template.id),
         family,
         name: String(components.name ?? template.name),
-        description: String(components.description ?? template.description),
+        description: String(components.description ?? describeRelicEffects(effects)),
         towerSpecific: components.towerSpecific === true,
         iconIndex: Number(components.iconIndex ?? template.iconIndex),
         power,
@@ -1300,8 +1300,7 @@ export class PathwardenEngine {
         variationSeed: Number(components.variationSeed ?? components.instanceId ?? entity.id),
         damageFactor: Number(components.damageFactor ?? 1),
         baseEffects,
-        effects,
-        description: String(components.description ?? describeRelicEffects(effects))
+        effects
       }
     })
     this.shockwaves = entities.filter(entity => entity.type === 6).map(entity => {
