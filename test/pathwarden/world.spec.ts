@@ -313,6 +313,14 @@ describe('Pathwarden authoritative world', () => {
         expect([...types]).toEqual(expect.arrayContaining(['runner', 'brute']))
     })
 
+    it('uses the shared rounded tower purchase formula', () => {
+        const world = new PathwardenWorld({ runId: 'run-cost-rounding', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const privateWorld = world as unknown as { towerPurchases: Record<string, number>, towerCost: (towerType: string) => number }
+        privateWorld.towerPurchases.bolt = 1
+
+        expect(privateWorld.towerCost('bolt')).toBe(91)
+    })
+
     it('restores active combat entities and wave counters on reconnect', () => {
         const source = new PathwardenWorld({ runId: 'run-10', revision: 2, realm: 1, seed: 1, mapPlan, gameState: null })
         source.spawnEntity({ type: 1, components: { towerType: 'bolt', col: 10, row: 10, invested: 64, level: 2, targeting: 'strong' } }, 10, 10, 0, 0, 0, 0, 10)

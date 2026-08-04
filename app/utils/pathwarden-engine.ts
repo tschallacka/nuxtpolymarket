@@ -5,6 +5,7 @@ import {
   PATHWARDEN_RELICS as SHARED_PATHWARDEN_RELICS,
   pathwardenRelicProfile as sharedPathwardenRelicProfile,
   pathwardenRelicEffects,
+  pathwardenTowerPurchaseCost,
   type PathwardenDefenseArchetype,
   type PathwardenDefenseBlueprint,
   type PathwardenDefenseFamily
@@ -2646,7 +2647,7 @@ export class PathwardenEngine {
   }
 
   private towerCost(type: PathwardenTowerType) {
-    return Math.ceil(towerStats(type).cost * (1 + (this.towerPurchases[type] ?? 0) * 0.28))
+    return pathwardenTowerPurchaseCost(type, this.towerPurchases[type] ?? 0)
   }
 
   getDebugState() {

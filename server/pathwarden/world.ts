@@ -4,7 +4,8 @@ import {
     PATHWARDEN_DEFENSE_BLUEPRINTS,
     pathwardenRelicDefinition,
     pathwardenRelicEffects,
-    pathwardenRelicOfferIds
+    pathwardenRelicOfferIds,
+    pathwardenTowerPurchaseCost
 } from '#shared/utils/gamelogic/pathwarden'
 import type {
     PathwardenInputCommand,
@@ -1175,10 +1176,8 @@ export class PathwardenWorld {
     }
 
     private towerCost(towerType: string) {
-        const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === towerType)
-        if (!defense) return Number.POSITIVE_INFINITY
         const purchases = Math.max(0, Math.floor(this.towerPurchases[towerType] ?? 0))
-        return Math.round(defense.aetherCost * (1 + purchases * 0.28))
+        return pathwardenTowerPurchaseCost(towerType, purchases)
     }
 
     private enemyRoutes() {

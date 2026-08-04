@@ -308,6 +308,12 @@ export const PATHWARDEN_DEFENSE_BLUEPRINTS: PathwardenDefenseBlueprint[] = DEFEN
 
 export type PathwardenDefenseId = string
 
+export function pathwardenTowerPurchaseCost(towerType: string, purchases: number) {
+    const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === towerType)
+    if (!defense) return Number.POSITIVE_INFINITY
+    return Math.round(defense.aetherCost * (1 + Math.max(0, Math.floor(purchases)) * 0.28))
+}
+
 export const PATHWARDEN_SKINS = [
     { id: 'warden-stone', name: 'Warden Stone', gemCost: 0, description: 'The traditional slate-and-cyan Warden livery.', palette: 'slate' },
     { id: 'ember-court', name: 'Ember Court', gemCost: 50, description: 'Black iron, crimson roofs, and furnace banners.', palette: 'ember' },
