@@ -95,5 +95,15 @@ describe('Pathwarden authority boundaries', () => {
         ]) {
             expect(readFileSync(path, 'utf8')).toContain('if (!import.meta.dev) return')
         }
+
+        for (const path of [
+            resolve(root, 'app/pages/games/aethergates-sprite-debug.vue'),
+            resolve(root, 'app/pages/games/bookofshadows-sprite-debug.vue'),
+            resolve(root, 'app/pages/games/fireinthehole-sprite-debug.vue')
+        ]) {
+            const source = readFileSync(path, 'utf8')
+            expect(source).toContain('const allowed = import.meta.dev')
+            expect(source).toContain('if (!allowed) await navigateTo(')
+        }
     })
 })

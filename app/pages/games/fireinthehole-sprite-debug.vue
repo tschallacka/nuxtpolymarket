@@ -2,6 +2,9 @@
 import type { FireBonusSymbol } from '#shared/utils/gamelogic/fireinthehole'
 import type { FireBaseSymbol } from '~/utils/fireinthehole-sprite'
 
+const allowed = import.meta.dev
+if (!allowed) await navigateTo('/games/fireinthehole')
+
 type SymRect = [number, number, number, number]
 type SymMeta<S extends string> = Record<S, { name: string, rect: SymRect }>
 

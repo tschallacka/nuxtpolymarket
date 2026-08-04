@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { AetherSymbol } from '#shared/utils/gamelogic/aethergates'
 
+const allowed = import.meta.dev
+if (!allowed) await navigateTo('/games/aethergates')
+
 type SymRect = [number, number, number, number]
 
 const symbols = Object.keys(AETHER_SYMBOL_META) as AetherSymbol[]

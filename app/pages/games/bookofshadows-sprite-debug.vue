@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { BosBaseSymbol, BosBonusSymbol } from '~/utils/bookofshadows-sprite'
 
+const allowed = import.meta.dev
+if (!allowed) await navigateTo('/games/bookofshadows')
+
 type SymRect = [number, number, number, number]
 type SymMeta<S extends string> = Record<S, { name: string, rect: SymRect }>
 
