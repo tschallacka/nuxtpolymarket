@@ -1211,11 +1211,12 @@ export class PathwardenEngine {
     this.enemies = entities.filter(entity => entity.type === 2).map(entity => {
       const components = entity.components ?? {}
       const type = (String(components.enemyType ?? 'raider') in enemyVisual ? String(components.enemyType ?? 'raider') : 'raider') as EnemyType
+      const exitKey = String(components.exitKey ?? 'castle-main')
       return {
         id: entity.id,
         type,
-        route: this.path.map(point => ({ ...point })),
-        exitKey: 'castle-main',
+        route: this.authoritativeEnemyRoute(exitKey),
+        exitKey,
         progress: Number(components.progress ?? 0),
         hp: Number(components.hp ?? 1),
         maxHp: Number(components.maxHp ?? 1),
@@ -1305,6 +1306,15 @@ export class PathwardenEngine {
       }
     })
     this.emitState()
+  }
+
+  private authoritativeEnemyRoute(exitKey: string) {
+    const [col, row] = exitKey.split(':').map(Number)
+    if (Number.isFinite(col) && Number.isFinite(row)) {
+      const route = this.enemyExitRoutes().find(exit => exit.route.some(cell => cell.col === col && cell.row === row))
+      if (route) return route.route.map(point => ({ ...point }))
+    }
+    return this.path.map(point => ({ ...point }))
   }
 
   applyAuthoritativeEvents(events: readonly PathwardenGameplayEvent[]) {

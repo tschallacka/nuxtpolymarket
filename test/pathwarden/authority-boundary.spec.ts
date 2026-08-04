@@ -33,6 +33,8 @@ describe('Pathwarden authority boundaries', () => {
         expect(engineSource).toContain("this.canSellRelics = ['planning', 'path', 'upgrade'].includes(this.phase)")
         expect(engineSource).toContain('this.placementMode = false')
         expect(engineSource).toContain('this.pendingWaveStart = false')
+        expect(engineSource).toContain('const exitKey = String(components.exitKey ?? \'castle-main\')')
+        expect(engineSource).toContain('this.authoritativeEnemyRoute(exitKey)')
         expect(debugClearCacheSource).toContain('closePathwardenSessionsForUser')
         const authoritativePlacement = engineSource.indexOf("if (this.serverAuthoritative && this.phase === 'planning')")
         const localPlacementValidation = engineSource.indexOf('const placement = this.placementStatus(cell)')
