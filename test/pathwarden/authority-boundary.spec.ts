@@ -30,6 +30,7 @@ describe('Pathwarden authority boundaries', () => {
         expect(componentSource).toContain('if (!activeRunId.value && !await ensureRunStarted()) return')
         expect(componentSource).toContain('if (startingRun) return startingRun')
         expect(realtimeSource).toContain('if (activeRunId === runId && (socket || reconnectTimer)) return')
+        expect(realtimeSource).toContain('predictionAgeMs')
         expect(engineSource).toContain("this.canSellRelics = ['planning', 'path', 'upgrade'].includes(this.phase)")
         expect(engineSource).toContain('this.placementMode = false')
         expect(engineSource).toContain('this.pendingWaveStart = false')

@@ -19,6 +19,7 @@ export interface PathwardenPredictionState {
     pendingInputs: number
     lastAcknowledgedInput: number
     corrections: number
+    predictionAgeMs: number
 }
 
 export function usePathwardenRealtime() {
@@ -38,6 +39,7 @@ export function usePathwardenRealtime() {
     const roundTripLatencyMs = ref(0)
     const maxTickGap = ref(0)
     const staleSnapshots = ref(0)
+    const predictionAgeMs = ref(0)
     const pending = new Map<number, PathwardenInputCommand>()
     const sentAt = new Map<number, number>()
     let socket: WebSocket | null = null
@@ -57,6 +59,12 @@ export function usePathwardenRealtime() {
 
     function reconcile(serverSnapshot: PathwardenWorldSnapshot) {
         predictedSnapshot.value = predictPathwardenSnapshot(serverSnapshot, pending.values())
+        updatePredictionAge()
+    }
+
+    function updatePredictionAge() {
+        const oldest = [...sentAt.values()].sort((left, right) => left - right)[0]
+        predictionAgeMs.value = oldest === undefined ? 0 : Math.max(0, Date.now() - oldest)
     }
 
     function handlePacket(event: MessageEvent) {
@@ -103,6 +111,7 @@ export function usePathwardenRealtime() {
                         }
                     }
                 }
+                updatePredictionAge()
                 reconcile(next)
                 return
             }
@@ -177,6 +186,7 @@ export function usePathwardenRealtime() {
                 }
                 lastAcknowledgedInput.value = Math.max(lastAcknowledgedInput.value, inputSequence)
                 nextInputSequence = Math.max(nextInputSequence, inputSequence + 1)
+                updatePredictionAge()
                 if (!payload?.accepted && payload?.reason) lastError.value = payload.reason
                 if (snapshot.value) reconcile(snapshot.value)
                 return
@@ -201,6 +211,7 @@ export function usePathwardenRealtime() {
         status.value = 'disconnected'
         pending.clear()
         sentAt.clear()
+        updatePredictionAge()
         snapshot.value = null
         mapPlan.value = null
         entities.value = []
@@ -258,6 +269,7 @@ export function usePathwardenRealtime() {
         const inputSequence = nextInputSequence++
         pending.set(inputSequence, command)
         sentAt.set(inputSequence, Date.now())
+        updatePredictionAge()
         if (predictedSnapshot.value) reconcile(predictedSnapshot.value)
         if (socket?.readyState === WebSocket.OPEN) socket.send(encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0))
         return inputSequence
@@ -278,6 +290,7 @@ export function usePathwardenRealtime() {
         roundTripLatencyMs: readonly(roundTripLatencyMs),
         maxTickGap: readonly(maxTickGap),
         staleSnapshots: readonly(staleSnapshots),
+        predictionAgeMs: readonly(predictionAgeMs),
         connect,
         send,
         close

@@ -1067,6 +1067,7 @@ onMounted(async () => {
             status: realtime.status.value,
             pendingInputs: realtime.pendingInputs.value,
             lastAcknowledgedInput: realtime.lastAcknowledgedInput.value,
+            predictionAgeMs: realtime.predictionAgeMs.value,
             lastError: realtime.lastError.value
           })
         },
