@@ -1099,6 +1099,12 @@ export class PathwardenEngine {
     this.streak = Math.max(0, authoritative.streak ?? this.streak)
     this.flawlessWaves = Math.max(0, authoritative.flawlessWaves ?? this.flawlessWaves)
     this.paused = authoritative.paused
+    this.canSellRelics = ['planning', 'path', 'upgrade'].includes(this.phase)
+    if (this.phase !== 'planning') {
+      this.placementMode = false
+      this.selectedTowerId = null
+      this.pendingWaveStart = false
+    }
     if (authoritative.globalRelics) {
       this.globalRelics = Object.fromEntries(authoritative.globalRelics.map(global => {
         const family = global.family as PathwardenGlobalRelicFamily
