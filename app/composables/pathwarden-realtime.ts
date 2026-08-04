@@ -67,9 +67,16 @@ export function usePathwardenRealtime() {
         predictionAgeMs.value = oldest === undefined ? 0 : Math.max(0, Date.now() - oldest)
     }
 
-    function handlePacket(event: MessageEvent) {
+    async function handlePacket(event: MessageEvent) {
         try {
-            const packet = decodePacket(event.data as ArrayBuffer)
+            // Node-based Nuxt development transport may expose binary frames
+            // as Blob objects, while the production adapter gives us an
+            // ArrayBuffer. Normalize both before decoding the compact packet.
+            const payload = event.data instanceof Blob
+                ? await event.data.arrayBuffer()
+                : event.data as ArrayBuffer
+            if (!(payload instanceof ArrayBuffer) || new Uint8Array(payload)[0] !== 0x50) return
+            const packet = decodePacket(payload)
             if (packet.header.kind === PathwardenPacketKind.FullSnapshot) {
                 const decoded = packet.payload as PathwardenWorldSnapshot
                 const next = packet.header.flags & 1
