@@ -3,6 +3,8 @@ import {
     PATHWARDEN_AMBIENT_FAMILIES,
     PATHWARDEN_DEFENSE_BLUEPRINTS,
     pathwardenRelicDefinition,
+    pathwardenRelicEffectComponents,
+    pathwardenRelicEffectsFromComponents,
     pathwardenRelicEffects,
     pathwardenRelicOfferIds,
     pathwardenTowerPurchaseCost
@@ -1051,6 +1053,8 @@ export class PathwardenWorld {
 
     private spawnRelic(relic: PathwardenSavedRelic) {
         this.nextRelicInstanceId = Math.max(this.nextRelicInstanceId, relic.instanceId + 1)
+        const baseEffects = relic.baseEffects ?? pathwardenRelicEffects(relic.family as never, relic.power)
+        const effects = relic.effects ?? baseEffects
         this.spawnEntity({ type: 5, components: {
             instanceId: relic.instanceId,
             relicId: relic.id,
@@ -1062,24 +1066,35 @@ export class PathwardenWorld {
             iconIndex: relic.iconIndex,
             power: relic.power,
             sellValue: relic.sellValue,
-            color: relic.color ?? '#c4b5fd'
+            color: relic.color ?? '#c4b5fd',
+            variationSeed: relic.variationSeed ?? relic.instanceId,
+            damageFactor: relic.damageFactor ?? 1,
+            ...pathwardenRelicEffectComponents('baseEffect', baseEffects),
+            ...pathwardenRelicEffectComponents('effect', effects)
         } }, 0, 0)
     }
 
     private relicFromEntity(entity: PathwardenEntity): PathwardenSavedRelic {
         const components = entity.data.components ?? {}
+        const family = String(components.family ?? 'fire')
+        const power = Number(components.power ?? 0.5)
+        const fallbackEffects = pathwardenRelicEffects(family as never, power)
         return {
             instanceId: Number(components.instanceId ?? entity.id),
             id: String(components.relicId ?? `server-relic-${entity.id}`),
-            family: String(components.family ?? 'fire'),
+            family,
             rarity: String(components.rarity ?? 'common'),
             name: String(components.name ?? 'Server Relic'),
             description: String(components.description ?? 'A server-authoritative Pathwarden relic.'),
             towerSpecific: components.towerSpecific === true,
             iconIndex: Number(components.iconIndex ?? 0),
-            power: Number(components.power ?? 0.5),
+            power,
             sellValue: Number(components.sellValue ?? 15),
-            color: String(components.color ?? '#c4b5fd')
+            color: String(components.color ?? '#c4b5fd'),
+            variationSeed: Number(components.variationSeed ?? 1),
+            damageFactor: Number(components.damageFactor ?? 1),
+            baseEffects: pathwardenRelicEffectsFromComponents(components, 'baseEffect', fallbackEffects),
+            effects: pathwardenRelicEffectsFromComponents(components, 'effect', fallbackEffects)
         }
     }
 

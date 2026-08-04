@@ -1,5 +1,29 @@
 import type { PathwardenSavedRelicEffects } from '#shared/types/pathwarden-save'
 
+export const PATHWARDEN_RELIC_EFFECT_KEYS: Array<keyof PathwardenSavedRelicEffects> = [
+  'directDamagePct', 'burnPct', 'burnDuration', 'slowPct', 'slowDuration',
+  'chainCount', 'chainRetentionPct', 'impactRadius', 'impactDamagePct', 'repairPct',
+  'armorPiercePct', 'echoEveryShots', 'echoPowerPct', 'attackSpeedPct', 'rangePct',
+  'aetherBonusPct', 'keepHealPct'
+]
+
+export function pathwardenRelicEffectComponents(prefix: 'baseEffect' | 'effect', effects: PathwardenSavedRelicEffects) {
+  return Object.fromEntries(PATHWARDEN_RELIC_EFFECT_KEYS.map(key => [`${prefix}_${key}`, effects[key]])) as Record<string, number>
+}
+
+export function pathwardenRelicEffectsFromComponents(
+  components: Record<string, number | string | boolean>,
+  prefix: 'baseEffect' | 'effect',
+  fallback: PathwardenSavedRelicEffects
+) {
+  const effects = { ...fallback }
+  for (const key of PATHWARDEN_RELIC_EFFECT_KEYS) {
+    const value = Number(components[`${prefix}_${key}`])
+    if (Number.isFinite(value)) effects[key] = value
+  }
+  return effects
+}
+
 export const PATHWARDEN_BOOST_IDS = ['bulwark', 'artificer', 'lens', 'reservoir', 'banner', 'bounty', 'arcanist'] as const
 export type PathwardenBoostId = typeof PATHWARDEN_BOOST_IDS[number]
 export type PathwardenBoostCurrency = 'coins' | 'gems'

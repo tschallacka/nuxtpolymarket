@@ -5,6 +5,7 @@ import {
   PATHWARDEN_RELICS as SHARED_PATHWARDEN_RELICS,
   pathwardenRelicProfile as sharedPathwardenRelicProfile,
   pathwardenRelicEffects,
+  pathwardenRelicEffectsFromComponents,
   pathwardenTowerPurchaseCost,
   type PathwardenDefenseArchetype,
   type PathwardenDefenseBlueprint,
@@ -1280,21 +1281,27 @@ export class PathwardenEngine {
     this.relicInventory = entities.filter(entity => entity.type === 5).map(entity => {
       const components = entity.components ?? {}
       const template = PATHWARDEN_RELICS.find(relic => relic.id === String(components.relicId ?? '')) ?? PATHWARDEN_RELICS[0]!
+      const family = String(components.family ?? template.family) as PathwardenRelicFamily
+      const power = Number(components.power ?? template.power)
+      const baseEffects = pathwardenRelicEffectsFromComponents(components, 'baseEffect', pathwardenRelicEffects(family, power))
+      const effects = pathwardenRelicEffectsFromComponents(components, 'effect', baseEffects)
       return {
         ...template,
         id: String(components.relicId ?? template.id),
-        family: String(components.family ?? template.family) as PathwardenRelicFamily,
+        family,
         name: String(components.name ?? template.name),
         description: String(components.description ?? template.description),
         towerSpecific: components.towerSpecific === true,
         iconIndex: Number(components.iconIndex ?? template.iconIndex),
-        power: Number(components.power ?? template.power),
+        power,
         sellValue: Number(components.sellValue ?? template.sellValue),
         color: String(components.color ?? template.color),
         instanceId: Number(components.instanceId ?? entity.id),
-        variationSeed: Number(components.instanceId ?? entity.id),
-        damageFactor: 1,
-        baseEffects: emptyRelicEffects()
+        variationSeed: Number(components.variationSeed ?? components.instanceId ?? entity.id),
+        damageFactor: Number(components.damageFactor ?? 1),
+        baseEffects,
+        effects,
+        description: String(components.description ?? describeRelicEffects(effects))
       }
     })
     this.shockwaves = entities.filter(entity => entity.type === 6).map(entity => {

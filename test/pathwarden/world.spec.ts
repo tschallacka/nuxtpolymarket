@@ -458,6 +458,29 @@ describe('Pathwarden authoritative world', () => {
         expect(world.getSnapshot().aether).toBe(205)
     })
 
+    it('round-trips authoritative relic effects through entity state', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-relic-effects', revision: 0, realm: 1, seed: 17, mapPlan, gameState: null })
+        const privateWorld = world as unknown as { choiceKeys: string[], openRelicChoice: () => void }
+        privateWorld.openRelicChoice()
+        privateWorld.choiceKeys = ['fire-common']
+        world.enqueue(1, { type: 'relic-choice', choice: 0, offerRevision: world.getChoiceOffer()!.offerRevision })
+        world.start()
+        vi.advanceTimersByTime(50)
+        world.stop()
+        const relic = world.exportGameState().relicInventory[0]!
+        expect(relic.effects).toEqual(relic.baseEffects)
+
+        const restored = new PathwardenWorld({ runId: 'run-relic-effects-restored', revision: 1, realm: 1, seed: 17, mapPlan, gameState: world.exportGameState() })
+        expect(restored.exportGameState().relicInventory[0]).toMatchObject({
+            id: relic.id,
+            variationSeed: relic.variationSeed,
+            damageFactor: relic.damageFactor,
+            baseEffects: relic.baseEffects,
+            effects: relic.effects
+        })
+    })
+
     it('applies bounded chain targets and impact damage on the authoritative projectile tick', () => {
         vi.useFakeTimers()
         const source = new PathwardenWorld({ runId: 'run-effects-source', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
