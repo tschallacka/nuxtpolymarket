@@ -129,6 +129,7 @@ describe('Pathwarden authoritative world', () => {
         const candidate = Array.from({ length: 5 }, (_, index) => ({ col: road[0]!.col + index - 2, row: road[0]!.row + 3 }))
             .find(cell => world.canApply({ type: 'place-tower', ...cell }))
         expect(candidate).toBeDefined()
+        expect(world.getSnapshot().revealedCells).toContainEqual(candidate)
         expect(world.enqueue(1, { type: 'place-tower', ...candidate! })).toBe(true)
         world.setChangeHandler(() => {})
         // The fixed tick is the only mutation boundary.

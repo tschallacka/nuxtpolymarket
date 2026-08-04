@@ -159,7 +159,10 @@ export class PathwardenWorld {
             paused: source.gameState?.paused === true,
             entityCount: 0,
             claimedRoomIds: [...this.claimedRooms],
-            revealedCells: []
+            revealedCells: [...this.revealed].map(key => {
+                const [col = 0, row = 0] = key.split(':').map(Number)
+                return { col, row }
+            })
         }
         this.maxLives = Math.max(this.boosts.startingLives, Number(source.gameState?.maxLives ?? this.boosts.startingLives))
         for (const [family, relic] of Object.entries(source.gameState?.globalRelics ?? {})) {
