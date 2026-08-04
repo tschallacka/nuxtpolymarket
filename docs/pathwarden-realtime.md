@@ -26,6 +26,13 @@ Gameplay packets use `shared/pathwarden/protocol.ts`. They are bounded binary pa
 
 The server sends a full map and entity/world snapshot on connection. The compact world snapshot includes keep capacity and aggregate global-relic identities/power so reconnects cannot regress the HUD or selected-building progression view. Subsequent world updates are emitted at tick boundaries: entity lifecycle changes use upsert/removal deltas, map changes use monotonic claimed-room/revealed-cell deltas, one-shot gameplay effects use stable-ID event packets (`impact`, `enemy-defeated`, `enemy-leak`, `wave-cleared`, and `ambient-story-completed`), and ordinary world snapshots omit repeated map arrays. A reconnect receives a fresh full snapshot and may resend only still-pending semantic commands. WebSocket ordering makes these deltas reliable within a session; reconnect always resets from the full snapshot and the renderer deduplicates replayed event IDs. A client more than 100 ticks behind requests a bounded reconnect resync.
 
+The Pathwarden page bootstraps an active run with the run identifier returned
+by `/api/pathwarden/state`; it does not fetch or restore gameplay JSON. The
+binary WebSocket is the sole live gameplay-state hydration path. The client
+debug inspection reports connection status, pending input count, oldest
+prediction age, last acknowledgement, correction errors, and transport error
+text.
+
 ## Recovery and rollback
 
 1. If the WebSocket closes, the client reconnects to the same run ID and waits for the full snapshot.
