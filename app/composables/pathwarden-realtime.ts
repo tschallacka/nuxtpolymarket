@@ -10,6 +10,7 @@ import {
     type PathwardenGameplayEvent
 } from '#shared/pathwarden/protocol'
 import type { PathwardenMapPlan } from '#shared/types/pathwarden-save'
+import { predictPathwardenSnapshot } from '#shared/pathwarden/prediction'
 
 export type PathwardenRealtimeStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -55,16 +56,7 @@ export function usePathwardenRealtime() {
     }
 
     function reconcile(serverSnapshot: PathwardenWorldSnapshot) {
-        const next = { ...serverSnapshot }
-        for (const command of pending.values()) {
-            if (command.type === 'pause' && !next.paused && command.value) next.paused = true
-            if (command.type === 'pause' && next.paused && !command.value) next.paused = false
-            if (command.type === 'start-wave' && next.phase === 'planning') {
-                next.phase = 'wave'
-                next.wave = Math.min(12, next.wave + 1)
-            }
-        }
-        predictedSnapshot.value = next
+        predictedSnapshot.value = predictPathwardenSnapshot(serverSnapshot, pending.values())
     }
 
     function handlePacket(event: MessageEvent) {

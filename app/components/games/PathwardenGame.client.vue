@@ -1105,6 +1105,10 @@ watch(realtime.snapshot, authoritative => {
   if ((authoritative.phase === 'defeat' || authoritative.phase === 'victory') && runActive.value) void settleRun(authoritative.phase)
 })
 
+watch(realtime.predictedSnapshot, predicted => {
+  if (predicted) engine?.applyAuthoritativeSnapshot(predicted)
+})
+
 watch(realtime.mapPlan, mapPlan => {
   if (mapPlan) engine?.applyAuthoritativeMapPlan(mapPlan as PathwardenMapPlan)
 })
