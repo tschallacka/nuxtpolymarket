@@ -53,3 +53,36 @@ The optional Battle simulator is not a client simulation: its authenticated
 `POST /api/pathwarden/simulate` endpoint runs the bounded analysis on the
 server, and the browser only renders the returned report. It never shares or
 mutates a live run.
+
+## Gameplay transition table
+
+Every live gameplay mutation enters through the binary command stream. The
+browser may predict only the presentation-safe phase change noted below; the
+server validates the command again at the tick boundary and the next snapshot
+is authoritative.
+
+| Command | Server validation | Authoritative transition | Renderer result |
+| --- | --- | --- | --- |
+| `select-tower` | Known owned blueprint identifier | Changes the selected blueprint for the run | Updates placement preview metadata |
+| `place-tower` | Planning phase, revealed non-road cell, empty cell, sufficient Aether | Debits Aether, increments purchase scaling, spawns tower entity | Renders the spawned tower; rejected placement leaves no tower |
+| `upgrade-tower` | Existing tower, planning phase, level and Aether bounds | Debits cost and updates level/investment | Renders updated tower components |
+| `fuse-tower` | Two existing same-type/same-level towers below cap | Removes source and raises target level/investment | Applies entity removal/update delta |
+| `move-tower` | Existing tower and legal revealed destination | Updates tower coordinates | Renders the entity at its new cell |
+| `salvage-tower` | Existing tower during planning | Removes tower and credits its server-calculated refund | Removes entity and reconciles Aether |
+| `set-targeting` | Existing tower during planning | Stores the targeting mode | Renders the selected targeting mode |
+| `start-wave` | Planning phase and remaining waves | Starts the fixed-tick wave and sets spawn schedule | Predicts only the phase label; server supplies enemies and timing |
+| `pause` | Non-terminal phase | Changes the authoritative pause flag | Predicts the toggle until the server accepts/rejects it |
+| `checkpoint-choice` | Current checkpoint offer and revision | Applies the selected checkpoint effect once | Renders the next server snapshot |
+| `continue-checkpoint` | Checkpoint phase | Opens the next path/relic offer or completes victory | Renders the server-supplied offer/terminal state |
+| `claim-path` | Current path offer, revision, and index | Claims the selected room and reveals its server map state | Applies map delta and next choice offer |
+| `relic-choice` | Current relic offer, revision, and index | Materializes the catalogue definition and applies its effect | Renders inventory/global-relic entity state |
+| `bind-relic` | Existing tower/relic in planning | Transfers the catalogue relic to the tower | Applies tower/relic entity deltas |
+| `rebind-relic` | Existing tower/relic, valid Aether amount and focus | Resolves deterministic preservation and debits Aether | Renders recovered relics and updated tower |
+| `sell-relic` | Existing relic outside wave/checkpoint | Credits the server sell value and removes the relic | Removes the relic and reconciles Aether |
+
+Coins and gems cross the live-game boundary only through authenticated
+Pathwarden economy endpoints for boosts, checkpoint settlement, abandon, and
+cooldown actions. Gameplay commands never accept client-supplied currency,
+score, reward, damage, route, timing, or modifier values; permanent
+Pathwarden progression is stored in Pathwarden-owned records, while the
+platform-shared economy contains only coins and gems.
