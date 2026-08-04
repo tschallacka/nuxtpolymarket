@@ -401,6 +401,25 @@ describe('Pathwarden authoritative world', () => {
         expect(world.canApply({ type: 'checkpoint-choice', choice: 1, offerRevision: 1 })).toBe(true)
     })
 
+    it('restores the exact server-owned choice offer after reconnect', () => {
+        const source = new PathwardenWorld({ runId: 'run-choice-reconnect-source', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const saved = source.exportGameState()
+        saved.phase = 'upgrade'
+        saved.choiceKind = 'relic'
+        saved.choiceChoices = [0, 1, 2]
+        saved.choiceKeys = ['fire-common', 'frost-common', 'chain-common']
+        saved.choiceRevision = 17
+
+        const restored = new PathwardenWorld({ runId: 'run-choice-reconnect', revision: 1, realm: 1, seed: 1, mapPlan, gameState: saved })
+
+        expect(restored.getChoiceOffer()).toEqual({
+            kind: 'relic',
+            choices: [0, 1, 2],
+            choiceKeys: ['fire-common', 'frost-common', 'chain-common'],
+            offerRevision: 17
+        })
+    })
+
     it('derives relic offers from the shared catalogue and materializes the selected definition', () => {
         vi.useFakeTimers()
         const world = new PathwardenWorld({ runId: 'run-relic-catalogue', revision: 0, realm: 1, seed: 17, mapPlan, gameState: null })

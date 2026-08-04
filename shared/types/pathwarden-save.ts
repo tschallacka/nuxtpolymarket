@@ -283,6 +283,10 @@ export interface PathwardenGameState {
     enemyId: number
     relicInstanceId: number
     lastInputSequence?: number
+    choiceKind?: 'checkpoint' | 'relic' | 'path'
+    choiceChoices?: number[]
+    choiceKeys?: string[]
+    choiceRevision?: number
     ambientActor?: PathwardenSavedAmbientActor
     ambientCooldown?: number
     nextAmbientStoryId?: number

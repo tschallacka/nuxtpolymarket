@@ -182,7 +182,16 @@ export class PathwardenWorld {
         this.spawnCooldown = Math.max(0, Math.floor(source.gameState?.spawnTimer ?? 0))
         this.ambientCooldown = Math.max(0, Math.floor(source.gameState?.ambientCooldown ?? (900 + (source.seed % 4501))))
         this.nextAmbientStoryId = Math.max(1, Math.min(250, Math.floor(source.gameState?.nextAmbientStoryId ?? 1)))
-        if (this.state.phase === 'checkpoint') {
+        const savedChoiceKind = source.gameState?.choiceKind
+        const savedChoiceKeys = source.gameState?.choiceKeys
+        if (savedChoiceKind && Array.isArray(savedChoiceKeys) && savedChoiceKeys.length > 0) {
+            this.choiceKind = savedChoiceKind
+            this.choices = Array.isArray(source.gameState?.choiceChoices)
+                ? source.gameState.choiceChoices.map(choice => Math.floor(choice))
+                : savedChoiceKeys.map((_, index) => index)
+            this.choiceKeys = [...savedChoiceKeys]
+            this.choiceRevision = Math.max(1, Math.floor(source.gameState?.choiceRevision ?? 1))
+        } else if (this.state.phase === 'checkpoint') {
             this.choiceKind = 'checkpoint'
             this.choices = [0, 1, 2]
             this.choiceKeys = ['cashout', 'continue', 'bonus']
@@ -462,6 +471,10 @@ export class PathwardenWorld {
             enemyId: this.nextEntityId,
             relicInstanceId: this.nextRelicInstanceId,
             lastInputSequence: this.lastInputSequence,
+            choiceKind: this.choiceKind ?? undefined,
+            choiceChoices: this.choiceKind ? [...this.choices] : undefined,
+            choiceKeys: this.choiceKind ? [...this.choiceKeys] : undefined,
+            choiceRevision: this.choiceKind ? this.choiceRevision : undefined,
             ambientActor: ambient && ambientComponents
                 ? {
                     storyId: Number(ambientComponents.storyId ?? 1),
