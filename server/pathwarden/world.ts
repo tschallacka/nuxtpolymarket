@@ -208,9 +208,11 @@ export class PathwardenWorld {
             } }, tower.col, tower.row, 0, 0, 0, 0, tower.id)
         }
         for (const enemy of source.gameState?.enemies ?? []) {
-            const position = this.routePosition(enemy.progress)
+            const exitKey = enemy.exitKey || 'castle-main'
+            const position = this.routePosition(enemy.progress, this.enemyRouteForKey(exitKey))
             this.spawnEntity({ type: 2, components: {
                 enemyType: enemy.type,
+                exitKey,
                 progress: enemy.progress,
                 hp: enemy.hp,
                 maxHp: enemy.maxHp,
@@ -414,10 +416,12 @@ export class PathwardenWorld {
                 relicShots: 0
             })),
             enemies: entities.filter(entity => entity.data.type === 2).map(entity => ({
+                ...(() => {
+                    const exitKey = String(entity.data.components?.exitKey ?? 'castle-main')
+                    return { route: this.enemyRouteForKey(exitKey), exitKey }
+                })(),
                 id: entity.id,
                 type: String(entity.data.components?.enemyType ?? 'raider'),
-                route: this.enemyRoute(),
-                exitKey: 'castle-main',
                 progress: Number(entity.data.components?.progress ?? 0),
                 hp: Number(entity.data.components?.hp ?? 1),
                 maxHp: Number(entity.data.components?.maxHp ?? 1),
@@ -774,7 +778,8 @@ export class PathwardenWorld {
                 }
                 continue
             }
-            const position = this.routePosition(progress)
+            const exitKey = String(components.exitKey ?? 'castle-main')
+            const position = this.routePosition(progress, this.enemyRouteForKey(exitKey))
             this.updateEntity(enemy.id, { x: position.col, y: position.row, data: { type: 2, components: { ...components, hp: dotHp, dotTimer, progress, slow, slowTimer, healTimer: enemyType === 'shaman' && healTimer === 0 ? 44 : healTimer } } })
         }
         this.simulateTowers()
@@ -802,7 +807,12 @@ export class PathwardenWorld {
     }
 
     private spawnEnemy() {
-        const route = this.enemyRoute()
+        const routes = this.enemyRoutes()
+        const routeEntry = routes[Math.max(0, this.spawnRemaining) % Math.max(1, routes.length)] ?? {
+            key: 'castle-main',
+            route: this.enemyRoute()
+        }
+        const route = routeEntry.route
         const start = route[route.length - 1] ?? { col: 80, row: 80 }
         const ordinal = Math.max(0, this.spawnRemaining)
         const enemyType = this.state.wave % 4 === 0 && this.spawnRemaining === 1
@@ -824,6 +834,7 @@ export class PathwardenWorld {
             type: 2,
             components: {
                 enemyType,
+                exitKey: routeEntry.key,
                 progress: 0,
                 hp,
                 maxHp: hp,
@@ -1157,7 +1168,7 @@ export class PathwardenWorld {
         return Math.round(defense.aetherCost * (1 + purchases * 0.28))
     }
 
-    private enemyRoute() {
+    private enemyRoutes() {
         type Cell = { col: number, row: number }
         const key = (cell: Cell) => `${cell.col}:${cell.row}`
         const points = new Map<string, Cell>()
@@ -1175,7 +1186,7 @@ export class PathwardenWorld {
         }
         const origin = this.mapPlan.rooms.find(room => room.id === this.mapPlan.castleRoomId)?.origin ?? { col: 80, row: 80 }
         const originKey = key(origin)
-        if (!edges.has(originKey)) return [origin, { col: origin.col + 1, row: origin.row + 1 }]
+        if (!edges.has(originKey)) return [{ key: 'castle-main', route: [origin, { col: origin.col + 1, row: origin.row + 1 }] }]
         const queue = [originKey]
         const previous = new Map<string, string | null>([[originKey, null]])
         for (let index = 0; index < queue.length; index++) {
@@ -1186,17 +1197,28 @@ export class PathwardenWorld {
                 queue.push(next)
             }
         }
-        const terminals = queue.filter(cell => cell !== originKey && (edges.get(cell)?.size ?? 0) <= 1)
-        const target = terminals.sort((left, right) => right.localeCompare(left))[0] ?? queue.at(-1)
-        if (!target) return [origin, { col: origin.col + 1, row: origin.row + 1 }]
-        const route: Cell[] = []
-        for (let current: string | null = target; current; current = previous.get(current) ?? null) route.push(points.get(current)!)
-        route.reverse()
-        return route.length > 1 ? route : [origin, { col: origin.col + 1, row: origin.row + 1 }]
+        const terminals = queue
+            .filter(cell => cell !== originKey && (edges.get(cell)?.size ?? 0) <= 1)
+            .sort()
+        const targets = terminals.length ? terminals : queue.at(-1) ? [queue.at(-1)!] : []
+        const routes = targets.map(target => {
+            const route: Cell[] = []
+            for (let current: string | null = target; current; current = previous.get(current) ?? null) route.push(points.get(current)!)
+            route.reverse()
+            return { key: target, route }
+        }).filter(entry => entry.route.length > 1)
+        return routes.length ? routes : [{ key: 'castle-main', route: [origin, { col: origin.col + 1, row: origin.row + 1 }] }]
     }
 
-    private routePosition(progress: number) {
-        const route = this.enemyRoute()
+    private enemyRoute() {
+        return this.enemyRoutes()[0]?.route ?? [{ col: 80, row: 80 }, { col: 81, row: 81 }]
+    }
+
+    private enemyRouteForKey(key: string) {
+        return this.enemyRoutes().find(entry => entry.key === key)?.route ?? this.enemyRoute()
+    }
+
+    private routePosition(progress: number, route = this.enemyRoute()) {
         const index = Math.min(route.length - 1, Math.floor((1 - Math.max(0, progress)) * (route.length - 1)))
         return route[index]!
     }

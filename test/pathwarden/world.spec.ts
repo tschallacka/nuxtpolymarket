@@ -284,6 +284,20 @@ describe('Pathwarden authoritative world', () => {
         expect(routeCells.has(`${enemy!.x}:${enemy!.y}`)).toBe(true)
     })
 
+    it('distributes spawned enemies across the authoritative road exits', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-9-exits', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        world.enqueue(1, { type: 'start-wave' })
+        world.start()
+        vi.advanceTimersByTime(50 * 30)
+        const exits = new Set(world.getEntities()
+            .filter(entity => entity.data.type === 2)
+            .map(entity => String(entity.data.components?.exitKey ?? '')))
+        world.stop()
+
+        expect(exits.size).toBeGreaterThan(1)
+    })
+
     it('uses the authoritative enemy archetype schedule', () => {
         vi.useFakeTimers()
         const source = new PathwardenWorld({ runId: 'run-9b-source', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
