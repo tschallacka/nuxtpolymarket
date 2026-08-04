@@ -1061,6 +1061,15 @@ onMounted(async () => {
       canvas: () => canvas.value,
       engine: () => engine,
       actions: {
+        inspectRealtime: {
+          description: 'Inspect the development WebSocket transport state',
+          run: () => ({
+            status: realtime.status.value,
+            pendingInputs: realtime.pendingInputs.value,
+            lastAcknowledgedInput: realtime.lastAcknowledgedInput.value,
+            lastError: realtime.lastError.value
+          })
+        },
         startWave: { description: 'Start the next enemy wave', run: () => engine?.startWave() },
         selectBallista: { description: 'Select the Ballista tower', run: () => engine?.selectTower('bolt') },
         inspectFrontier: { description: 'Enter frontier selection for development inspection', run: () => engine?.debugOpenFrontier() },

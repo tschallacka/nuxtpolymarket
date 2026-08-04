@@ -222,6 +222,7 @@ export function usePathwardenRealtime() {
 
     function connect(runId: string) {
         if (!import.meta.client || !runId) return
+        if (activeRunId === runId && (socket || reconnectTimer)) return
         close()
         activeRunId = runId
         intentionalClose = false
