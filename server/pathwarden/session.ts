@@ -72,7 +72,7 @@ function send(session: ActiveSession, payload: ArrayBuffer) {
 }
 
 function parseRunId(peer: Peer) {
-    const url = new URL(peer.request?.url ?? 'http://localhost')
+    const url = new URL(peer.request?.url ?? 'http://localhost', 'http://pathwarden.invalid')
     return url.searchParams.get('runId') ?? ''
 }
 

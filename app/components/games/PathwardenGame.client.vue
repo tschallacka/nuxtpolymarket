@@ -53,8 +53,6 @@ const introStory = [
   }
 ] as const
 
-definePageMeta({ title: 'Pathwarden' })
-
 const canvas = ref<HTMLCanvasElement | null>(null)
 const mapGenerating = ref(false)
 const mapGenerationProgress = ref(0)
@@ -670,6 +668,18 @@ async function ensureRunStarted() {
   if (startingRun) return startingRun
   startingRun = (async () => {
     try {
+      // A run may have been created just before this renderer mounted, while
+      // its initial useFetch response was still being resolved. Adopt that
+      // server-owned run before attempting to create another one.
+      const currentState = await $fetch('/api/pathwarden/state')
+      if (currentState.activeRun?.id) {
+        runActive.value = true
+        activeRunId.value = currentState.activeRun.id
+        selectedRealm.value = currentState.activeRun.realm ?? selectedRealm.value
+        engine?.setServerAuthoritative()
+        realtime.connect(currentState.activeRun.id)
+        return true
+      }
       const response = await $fetch('/api/pathwarden/start-run', {
         method: 'POST',
         body: {
@@ -1036,6 +1046,10 @@ onMounted(async () => {
   cooldownClock = setInterval(() => {
     nowMs.value = Date.now()
   }, 1000)
+  // The page can be entered immediately after start-run completes elsewhere
+  // (for example from a browser smoke test or a reconnect). Refresh the
+  // server-owned state before deciding whether the renderer needs a live run.
+  await refreshBoosts()
   hintsEnabled.value = localStorage.getItem('pathwarden-hints') !== 'off'
   if (boostState.value?.activeRun?.id) {
       runActive.value = true
@@ -2133,7 +2147,7 @@ watch(() => [snapshot.value.phase, snapshot.value.wave] as const, ([phase, wave]
                 </div>
               </div>
               <div class="overflow-x-auto">
-                <ChartLine
+                <ChartsChartLine
                   :data="simulationResult.waves"
                   :x="simulationChartX"
                   :y="simulationChartY"
