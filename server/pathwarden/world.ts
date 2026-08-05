@@ -295,7 +295,15 @@ export class PathwardenWorld {
     }
 
     canApply(command: PathwardenInputCommand) {
-        if (command.type === 'place-tower') return this.validatePlacement(command).allowed
+        if (command.type === 'place-tower') {
+            const queuedSelection = [...this.commands]
+                .reverse()
+                .find(queued => queued.command.type === 'select-tower')
+            const selectedTower = command.tower ?? (queuedSelection?.command.type === 'select-tower'
+                ? queuedSelection.command.tower
+                : this.selectedTower)
+            return this.validatePlacement(command, selectedTower).allowed
+        }
         if (command.type === 'upgrade-tower') return this.validateTower(command.id, 'upgrade')
         if (command.type === 'fuse-tower') return this.validateFuse(command.sourceId, command.targetId)
         if (command.type === 'salvage-tower') return this.validateTower(command.id, 'salvage')
@@ -565,6 +573,28 @@ export class PathwardenWorld {
         }
         if (command.type === 'select-tower') {
             this.selectedTower = command.tower
+            return true
+        }
+        if (command.type === 'place-tower') {
+            const towerType = command.tower ?? this.selectedTower
+            const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === towerType)
+            if (!defense) return false
+            const placement = this.validatePlacement(command, defense.id)
+            if (!placement.allowed) return false
+            this.selectedTower = defense.id
+            this.state.aether -= placement.cost
+            this.towerPurchases[defense.id] = (this.towerPurchases[defense.id] ?? 0) + 1
+            this.spawnEntity({ type: 1, components: {
+                towerType: defense.id,
+                col: command.col,
+                row: command.row,
+                invested: placement.cost,
+                cooldown: 0,
+                level: 1,
+                targeting: 'first',
+                relicStacks: 0,
+                relicPower: 0
+            } }, command.col, command.row)
             return true
         }
         if (command.type === 'upgrade-tower') {
@@ -1128,9 +1158,9 @@ export class PathwardenWorld {
         return `${col}:${row}`
     }
 
-    private validatePlacement(command: Extract<PathwardenInputCommand, { type: 'place-tower' }>) {
+    private validatePlacement(command: Extract<PathwardenInputCommand, { type: 'place-tower' }>, selectedTower = command.tower ?? this.selectedTower) {
         const key = this.cellKey(command.col, command.row)
-        const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === this.selectedTower)
+        const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === selectedTower)
         if (this.state.phase !== 'planning') return { allowed: false, reason: 'Towers can only be placed during planning.' }
         if (!defense) return { allowed: false, reason: 'Unknown defense blueprint.' }
         if (!this.revealed.has(key)) return { allowed: false, reason: 'The mist still covers that ground.' }

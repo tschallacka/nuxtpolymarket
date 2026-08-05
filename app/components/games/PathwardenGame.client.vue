@@ -436,7 +436,8 @@ const phaseLabel = computed(() => ({
   defeat: 'Keep destroyed'
 }[snapshot.value.phase]))
 
-function selectTower(type: PathwardenTowerType) {
+async function selectTower(type: PathwardenTowerType) {
+  if (!await ensureRunStarted()) return
   engine?.selectTower(type)
 }
 
@@ -500,8 +501,8 @@ function defenseAdvice(defense: typeof PATHWARDEN_DEFENSE_BLUEPRINTS[number]) {
   return 'Place where routes remain in range for a long time. Control and reach matter more than raw damage, especially before a crowded wave.'
 }
 
-function chooseInventoryDefense(type: PathwardenTowerType) {
-  selectTower(type)
+async function chooseInventoryDefense(type: PathwardenTowerType) {
+  await selectTower(type)
   defenseInventoryOpen.value = false
 }
 
@@ -1074,7 +1075,43 @@ onMounted(async () => {
             lastAcknowledgedInput: realtime.lastAcknowledgedInput.value,
             predictionAgeMs: realtime.predictionAgeMs.value,
             lastError: realtime.lastError.value
-          })
+            })
+        },
+        queryTransportLog: {
+          description: 'Query bounded client and server transport logs',
+          run: async input => {
+            const options = (input ?? {}) as Parameters<typeof realtime.queryDebugLog>[0]
+            return realtime.queryDebugLog(options, 'both')
+          }
+        },
+        scrollTransportLog: {
+          description: 'Scroll backward through bounded client and server transport logs',
+          run: async input => {
+            const options = (input ?? {}) as Parameters<typeof realtime.scrollDebugLog>[0]
+            return realtime.scrollDebugLog(options, 'both')
+          }
+        },
+        saveTransportLog: {
+          description: 'Save a named transport-log segment for later comparison',
+          run: async input => {
+            const value = input as { name?: string, filter?: string, limit?: number }
+            return realtime.saveDebugLog(String(value?.name ?? ''), {
+              filter: value?.filter,
+              limit: value?.limit
+            }, 'both')
+          }
+        },
+        listSavedTransportLogs: {
+          description: 'List named saved client and server transport-log segments',
+          run: () => realtime.listSavedDebugLog('both')
+        },
+        deleteSavedTransportLog: {
+          description: 'Delete one named saved transport-log segment',
+          run: input => realtime.deleteSavedDebugLog(String((input as { name?: string })?.name ?? ''), 'both')
+        },
+        clearTransportLog: {
+          description: 'Clear active transport logs; server clear also removes server saves',
+          run: () => realtime.clearDebugLog()
         },
         startWave: { description: 'Start the next enemy wave', run: () => engine?.startWave() },
         selectBallista: { description: 'Select the Ballista tower', run: () => engine?.selectTower('bolt') },

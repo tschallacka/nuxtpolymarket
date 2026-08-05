@@ -7,6 +7,8 @@ import { pathwardenLevels, recordPathwardenAmbientStory } from '#server/utils/pa
 import { pathwardenBoostEffects } from '#shared/utils/gamelogic/pathwarden'
 import { PathwardenWorld } from '#server/pathwarden/world'
 import type { PathwardenEntity } from '#server/pathwarden/world'
+import { recordPathwardenServerDebug } from '#server/pathwarden/debug-log'
+import { pathwardenPacketMetadata } from '#shared/pathwarden/debug-log'
 import {
     pathwardenMetricCommand,
     pathwardenMetricConnection,
@@ -57,6 +59,11 @@ export function hasPathwardenSessionForUser(userId: string) {
 }
 
 function send(session: ActiveSession, payload: ArrayBuffer) {
+    recordPathwardenServerDebug('packet.sent', {
+        runId: session.runId,
+        direction: 'out',
+        ...pathwardenPacketMetadata(payload)
+    })
     try {
         session.peer.send(payload)
         pathwardenMetricPacket('out', payload.byteLength)
@@ -188,8 +195,16 @@ export async function closePathwardenSessionsForUser(userId: string, code = 4000
 }
 
 function handleCommand(session: ActiveSession, command: PathwardenInputCommand, inputSequence: number) {
+    recordPathwardenServerDebug('command.received', {
+        runId: session.runId,
+        direction: 'in',
+        inputSequence,
+        commandType: command.type,
+        command
+    })
     if (inputSequence <= session.world.lastAppliedInput) {
         pathwardenMetricCommand(true)
+        recordPathwardenServerDebug('command.duplicate', { runId: session.runId, inputSequence, commandType: command.type })
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
         return
     }
@@ -200,6 +215,12 @@ function handleCommand(session: ActiveSession, command: PathwardenInputCommand, 
     }
     if (session.commandsInWindow >= MAX_COMMANDS_PER_SECOND) {
         pathwardenMetricCommand(false)
+        recordPathwardenServerDebug('command.rejected', {
+            runId: session.runId,
+            inputSequence,
+            commandType: command.type,
+            reason: 'Pathwarden command rate limit exceeded'
+        })
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, 'Pathwarden command rate limit exceeded'))
         return
     }
@@ -207,21 +228,39 @@ function handleCommand(session: ActiveSession, command: PathwardenInputCommand, 
     if (!session.world.canApply(command)) {
         pathwardenMetricCommand(false)
         const reason = 'Command is not valid in the current Pathwarden state'
+        recordPathwardenServerDebug('command.rejected', {
+            runId: session.runId,
+            inputSequence,
+            commandType: command.type,
+            reason
+        })
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, reason))
         return
     }
     if (!session.world.enqueue(inputSequence, command)) {
         pathwardenMetricCommand(false)
+        recordPathwardenServerDebug('command.rejected', {
+            runId: session.runId,
+            inputSequence,
+            commandType: command.type,
+            reason: 'Pathwarden command queue is full'
+        })
         send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, false, 'Pathwarden command queue is full'))
         return
     }
     pathwardenMetricCommand(true)
+    recordPathwardenServerDebug('command.queued', {
+        runId: session.runId,
+        inputSequence,
+        commandType: command.type
+    })
     send(session, encodeCommandAck(inputSequence, session.world.getSnapshot().tick, true))
 }
 
 export async function openPathwardenSession(peer: Peer) {
     const session = await createSession(peer)
     if (!session) return
+    recordPathwardenServerDebug('socket.open', { runId: session.runId })
     const previous = sessions.get(session.runId)
     pathwardenMetricConnection(Boolean(previous))
     previous?.peer.close(4009, 'Replaced by a newer Pathwarden session')
@@ -240,6 +279,15 @@ export async function openPathwardenSession(peer: Peer) {
         const nextIds = new Set(nextEntities.map(entity => entity.id))
         const removed = [...session.lastEntities.keys()].filter(id => !nextIds.has(id))
         session.lastEntities = new Map(nextEntities.map(entity => [entity.id, entity]))
+        for (const entity of upserts.filter(candidate => candidate.type === 1)) {
+            recordPathwardenServerDebug('entity.tower_upserted', {
+                runId: session.runId,
+                entityId: entity.id,
+                col: entity.components?.col ?? entity.x,
+                row: entity.components?.row ?? entity.y,
+                acknowledgedInput: session.world.lastAppliedInput
+            })
+        }
         const nextMap = mapState(snapshot)
         const claimedRoomIds = [...nextMap.claimedRoomIds].filter(roomId => !session.lastClaimedRoomIds.has(roomId))
         const revealedCells = [...nextMap.revealedCells]
@@ -289,8 +337,13 @@ export async function openPathwardenSession(peer: Peer) {
 export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): ArrayBuffer | SharedArrayBuffer }) {
     const session = [...sessions.values()].find(candidate => candidate.peer === peer)
     if (!session) return
+    const rawPayload = message.arrayBuffer()
+    recordPathwardenServerDebug('packet.received', {
+        runId: session.runId,
+        direction: 'in',
+        ...pathwardenPacketMetadata(rawPayload)
+    })
     try {
-        const rawPayload = message.arrayBuffer()
         const packet = decodePacket(rawPayload)
         pathwardenMetricPacket('in', rawPayload.byteLength)
         if (packet.header.kind !== PathwardenPacketKind.InputCommand) return
@@ -298,6 +351,10 @@ export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): Ar
         if (!input) throw new Error('Invalid Pathwarden input')
         handleCommand(session, input.command, input.inputSequence)
     } catch (error) {
+        recordPathwardenServerDebug('packet.decode_error', {
+            runId: session.runId,
+            error: error instanceof Error ? error.message : 'Invalid Pathwarden packet'
+        })
         send(session, encodeProtocolError(error instanceof Error ? error.message : 'Invalid Pathwarden packet'))
     }
 }
@@ -305,6 +362,7 @@ export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): Ar
 export function closePathwardenSession(peer: Peer) {
     for (const [runId, session] of sessions) {
         if (session.peer === peer) {
+            recordPathwardenServerDebug('socket.close', { runId, reason: 'peer closed' })
             session.world.stop()
             session.lastPersistedTick = -1
             persistWorld(session, session.world.getSnapshot().tick, true)

@@ -144,6 +144,22 @@ describe('Pathwarden authoritative world', () => {
         })
     })
 
+    it('validates placement against a queued tower selection', () => {
+        vi.useFakeTimers()
+        const world = new PathwardenWorld({ runId: 'run-5b', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })
+        const road = mapPlan.rooms.find(room => room.id === mapPlan.castleRoomId)!.roadCells
+        const candidate = Array.from({ length: 5 }, (_, index) => ({ col: road[0]!.col + index - 2, row: road[0]!.row + 3 }))
+            .find(cell => world.canApply({ type: 'place-tower', ...cell }))!
+
+        expect(world.enqueue(1, { type: 'select-tower', tower: 'mortar' })).toBe(true)
+        expect(world.enqueue(2, { type: 'place-tower', ...candidate! })).toBe(true)
+        world.start()
+        vi.advanceTimersByTime(50)
+        world.stop()
+
+        expect(world.getEntities()[0]!.data.components).toMatchObject({ towerType: 'mortar' })
+    })
+
     it('applies building mutations only at the authoritative tick boundary', () => {
         vi.useFakeTimers()
         const world = new PathwardenWorld({ runId: 'run-6', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })

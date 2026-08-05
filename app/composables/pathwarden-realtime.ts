@@ -9,6 +9,12 @@ import {
     type PathwardenEntityState,
     type PathwardenGameplayEvent
 } from '#shared/pathwarden/protocol'
+import {
+    getPathwardenDebugLog,
+    pathwardenPacketMetadata,
+    type PathwardenDebugQuery,
+    type PathwardenDebugQueryResult
+} from '#shared/pathwarden/debug-log'
 import type { PathwardenMapPlan } from '#shared/types/pathwarden-save'
 import { predictPathwardenSnapshot } from '#shared/pathwarden/prediction'
 
@@ -23,6 +29,7 @@ export interface PathwardenPredictionState {
 }
 
 export function usePathwardenRealtime() {
+    const debugLog = import.meta.dev ? getPathwardenDebugLog('client') : null
     const status = ref<PathwardenRealtimeStatus>('disconnected')
     const snapshot = ref<PathwardenWorldSnapshot | null>(null)
     const mapPlan = ref<PathwardenMapPlan | null>(null)
@@ -48,6 +55,10 @@ export function usePathwardenRealtime() {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let intentionalClose = false
     let lastResyncAt = 0
+
+    function recordDebug(event: string, fields: Record<string, unknown> = {}) {
+        debugLog?.record(event, fields)
+    }
 
     function requestResync(reason: string) {
         const now = Date.now()
@@ -75,8 +86,22 @@ export function usePathwardenRealtime() {
             const payload = event.data instanceof Blob
                 ? await event.data.arrayBuffer()
                 : event.data as ArrayBuffer
+            if (payload instanceof ArrayBuffer) {
+                recordDebug('packet.received', {
+                    direction: 'in',
+                    ...pathwardenPacketMetadata(payload)
+                })
+            }
             if (!(payload instanceof ArrayBuffer) || new Uint8Array(payload)[0] !== 0x50) return
             const packet = decodePacket(payload)
+            recordDebug('packet.decoded', {
+                direction: 'in',
+                packetKind: pathwardenPacketMetadata(payload).packetKind,
+                packetKindCode: packet.header.kind,
+                packetSequence: packet.header.sequence,
+                tick: packet.header.tick,
+                acknowledgedInput: packet.header.acknowledgedInput
+            })
             if (packet.header.kind === PathwardenPacketKind.FullSnapshot) {
                 const decoded = packet.payload as PathwardenWorldSnapshot
                 const next = packet.header.flags & 1
@@ -195,6 +220,11 @@ export function usePathwardenRealtime() {
                 nextInputSequence = Math.max(nextInputSequence, inputSequence + 1)
                 updatePredictionAge()
                 if (!payload?.accepted && payload?.reason) lastError.value = payload.reason
+                recordDebug(payload?.accepted ? 'command.acknowledged' : 'command.rejected', {
+                    inputSequence,
+                    accepted: payload?.accepted ?? false,
+                    reason: payload?.reason
+                })
                 if (snapshot.value) reconcile(snapshot.value)
                 return
             }
@@ -205,6 +235,7 @@ export function usePathwardenRealtime() {
         } catch (error) {
             lastError.value = error instanceof Error ? error.message : 'Invalid Pathwarden packet'
             status.value = 'error'
+            recordDebug('packet.decode_error', { error: lastError.value })
         }
     }
 
@@ -243,21 +274,34 @@ export function usePathwardenRealtime() {
             socket.binaryType = 'arraybuffer'
             status.value = 'connecting'
             lastError.value = null
+            recordDebug('socket.connecting', { runId })
             socket.onopen = () => {
                 status.value = 'connected'
-                socket?.send(encodeHello())
+                recordDebug('socket.open', { runId })
+                const hello = encodeHello()
+                recordDebug('packet.sent', { direction: 'out', ...pathwardenPacketMetadata(hello) })
+                socket?.send(hello)
                 for (const [inputSequence, command] of pending) {
                     sentAt.set(inputSequence, Date.now())
-                    socket?.send(encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0))
+                    const payload = encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0)
+                    recordDebug('command.sent', {
+                        inputSequence,
+                        commandType: command.type,
+                        command,
+                        ...pathwardenPacketMetadata(payload)
+                    })
+                    socket?.send(payload)
                 }
             }
             socket.onmessage = handlePacket
             socket.onerror = () => {
                 status.value = 'error'
                 lastError.value = 'Pathwarden gameplay connection failed'
+                recordDebug('socket.error', { runId, error: lastError.value })
             }
             socket.onclose = () => {
                 socket = null
+                recordDebug('socket.close', { runId, intentional: intentionalClose })
                 if (!intentionalClose && activeRunId === runId) {
                     status.value = 'connecting'
                     reconnectTimer = setTimeout(() => {
@@ -278,8 +322,103 @@ export function usePathwardenRealtime() {
         sentAt.set(inputSequence, Date.now())
         updatePredictionAge()
         if (predictedSnapshot.value) reconcile(predictedSnapshot.value)
-        if (socket?.readyState === WebSocket.OPEN) socket.send(encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0))
+        if (socket?.readyState === WebSocket.OPEN) {
+            const payload = encodeInputCommand(inputSequence, command, snapshot.value?.tick ?? 0)
+            recordDebug('command.sent', {
+                inputSequence,
+                commandType: command.type,
+                command,
+                ...pathwardenPacketMetadata(payload)
+            })
+            socket.send(payload)
+        } else {
+            recordDebug('command.queued_offline', { inputSequence, commandType: command.type, command })
+        }
         return inputSequence
+    }
+
+    async function queryDebugLog(options: PathwardenDebugQuery = {}, side: 'both' | 'client' | 'server' = 'both') {
+        const empty: PathwardenDebugQueryResult = {
+            entries: [],
+            total: 0,
+            returned: 0,
+            nextBefore: null,
+            nextAfter: null
+        }
+        const client = side === 'server' ? empty : debugLog?.query(options) ?? empty
+        const server = side === 'client'
+            ? empty
+            : await $fetch<PathwardenDebugQueryResult>('/api/pathwarden/debug-log', {
+                query: {
+                    filter: options.filter,
+                    select: options.select,
+                    limit: options.limit,
+                    before: options.before,
+                    after: options.after,
+                    saved: options.saved
+                }
+            })
+        return { client, server }
+    }
+
+    function scrollDebugLog(options: PathwardenDebugQuery = {}, side: 'both' | 'client' | 'server' = 'both') {
+        return queryDebugLog(options, side)
+    }
+
+    async function saveDebugLog(name: string, options: PathwardenDebugQuery = {}, side: 'both' | 'client' | 'server' = 'both') {
+        const client = side === 'server' ? null : debugLog?.save(name, options) ?? null
+        const server = side === 'client'
+            ? null
+            : await $fetch('/api/pathwarden/debug-log', {
+                method: 'POST',
+                body: { action: 'save', name, ...options }
+            })
+        return { client, server }
+    }
+
+    async function listSavedDebugLog(side: 'both' | 'client' | 'server' = 'both') {
+        const client = side === 'server' ? [] : debugLog?.listSaved() ?? []
+        const server = side === 'client'
+            ? []
+            : (await $fetch<{ savedSegments: unknown[] }>('/api/pathwarden/debug-log', {
+                method: 'POST',
+                body: { action: 'list' }
+            })).savedSegments
+        return { client, server }
+    }
+
+    async function deleteSavedDebugLog(name: string, side: 'both' | 'client' | 'server' = 'both') {
+        const client = side === 'server' ? false : debugLog?.deleteSaved(name) ?? false
+        const server = side === 'client'
+            ? false
+            : (await $fetch<{ deleted: boolean }>('/api/pathwarden/debug-log', {
+                method: 'POST',
+                body: { action: 'delete', name }
+            })).deleted
+        return { client, server }
+    }
+
+    function clearSavedDebugLog() {
+        debugLog?.clearSaved()
+    }
+
+    async function clearDebugLog() {
+        debugLog?.clear()
+        if (import.meta.dev) await $fetch('/api/pathwarden/debug-log', { method: 'DELETE' })
+    }
+
+    if (import.meta.dev) {
+        const globals = globalThis as typeof globalThis & {
+            __POLYNUX_PATHWARDEN_DEBUG__?: Record<string, unknown>
+        }
+        globals.__POLYNUX_PATHWARDEN_DEBUG__ = {
+            query: queryDebugLog,
+            scroll: scrollDebugLog,
+            save: saveDebugLog,
+            listSaved: listSavedDebugLog,
+            deleteSaved: deleteSavedDebugLog,
+            clear: clearDebugLog
+        }
     }
 
     return {
@@ -300,6 +439,13 @@ export function usePathwardenRealtime() {
         predictionAgeMs: readonly(predictionAgeMs),
         connect,
         send,
+        queryDebugLog,
+        scrollDebugLog,
+        saveDebugLog,
+        listSavedDebugLog,
+        deleteSavedDebugLog,
+        clearSavedDebugLog,
+        clearDebugLog,
         close
     }
 }

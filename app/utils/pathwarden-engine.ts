@@ -4509,7 +4509,7 @@ export class PathwardenEngine {
     const cell = this.pointerCell(event)
     if (!cell) return
     if (this.serverAuthoritative && this.phase === 'planning') {
-      this.callbacks.onCommand?.({ type: 'place-tower', col: cell.col, row: cell.row })
+      this.callbacks.onCommand?.({ type: 'place-tower', tower: this.selectedTower, col: cell.col, row: cell.row })
       this.message = `${towerStats(this.selectedTower).name} placement requested.`
       this.emitState()
       return
@@ -4555,7 +4555,7 @@ export class PathwardenEngine {
       this.burst({ x: position.x, y: position.y - 10 }, '#fb7185', 9, 95)
     } else {
       if (this.serverAuthoritative) {
-        this.callbacks.onCommand?.({ type: 'place-tower', col: cell.col, row: cell.row })
+        this.callbacks.onCommand?.({ type: 'place-tower', tower: this.selectedTower, col: cell.col, row: cell.row })
         this.message = `${stats.name} placement requested.`
         this.emitState()
         return
@@ -4581,7 +4581,7 @@ export class PathwardenEngine {
       this.burst(position, stats.color, 18, 160)
       this.shockwaves.push({ ...position, radius: 5, maxRadius: 52, life: 0.55, color: stats.color })
       this.message = `${stats.name} raised on height ${this.elevations[cell.row]![cell.col]}.`
-      this.callbacks.onCommand?.({ type: 'place-tower', col: cell.col, row: cell.row })
+      this.callbacks.onCommand?.({ type: 'place-tower', tower: this.selectedTower, col: cell.col, row: cell.row })
     }
     this.emitState()
   }

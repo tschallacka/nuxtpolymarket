@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+project_root="$(cd -- "$script_dir/.." && pwd)"
+
+while read -r pid; do
+    [[ -n "$pid" ]] || continue
+    kill "$pid" 2>/dev/null || true
+done < <(pgrep -f "$project_root/(node_modules/.bin/nuxt dev|node_modules/@nuxt/cli/dist/dev/index.mjs|node_modules/.bin/bun --bun nuxt dev)" || true)
+
+exec bash "$script_dir/start-nix-dev-env.sh" "$@"
