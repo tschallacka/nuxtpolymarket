@@ -161,7 +161,7 @@ const AI_TOOL_DEFINITIONS: OpenRouterTool[] = [
         type: 'function',
         function: {
             name: 'start_colony_upgrade',
-            description: 'Start one Colony builder upgrade: an upgrade track, the habitat level-up, or species research. Read the player overview first to compare every upgrade, its prerequisites, costs, and whether the builder is busy.',
+            description: 'Start one Colony builder upgrade: an upgrade track, the habitat level-up, or species research. Read the player overview first to compare every upgrade, its prerequisites, costs, and which builders are free.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -311,35 +311,6 @@ const AI_TOOL_DEFINITIONS: OpenRouterTool[] = [
         }
     },
     ...CASINO_TOOLS,
-    {
-        type: 'function',
-        function: {
-            name: 'play_blackjack',
-            description: 'Play and fully resolve one blackjack hand using basic strategy. This spends the requested coin bet and may double or split when the live balance can cover the additional stake. Use this single tool instead of starting a hand or taking individual blackjack actions.',
-            parameters: {
-                type: 'object',
-                properties: { bet: { type: 'number', minimum: 1, maximum: AI_CASINO_MAX_BET } },
-                required: ['bet'],
-                additionalProperties: false
-            }
-        }
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'play_blackjack_rounds',
-            description: `Play and fully resolve 1 to ${AI_MAX_ROUNDS} blackjack hands with basic strategy, entirely on the server, and return aggregate results. Each hand uses the same base bet and may double or split when the live balance can cover the extra stake. Prefer this over calling play_blackjack repeatedly when the player wants more than one hand.`,
-            parameters: {
-                type: 'object',
-                properties: {
-                    bet: { type: 'number', minimum: 1, maximum: AI_CASINO_MAX_BET, description: 'Base coin bet per hand.' },
-                    rounds: { type: 'integer', minimum: 1, maximum: AI_MAX_ROUNDS, description: 'Number of hands to play.' }
-                },
-                required: ['bet', 'rounds'],
-                additionalProperties: false
-            }
-        }
-    },
     {
         type: 'function',
         function: {

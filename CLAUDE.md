@@ -125,6 +125,19 @@ Do not roll your own from `crypto.getRandomValues`. Note `x / 0xFFFFFFFF` is a s
 - `transactions` — `id`, `userId`, `amount`, `type` (`'credit'` | `'debit'`), `category`, `createdAt`
 - `session`, `account`, `verification` — managed by better-auth, don't touch directly
 
+### Changing the schema
+
+Schema changes ship as committed migration files. Edit `server/database/schema.ts`, then:
+
+```bash
+bun run db:generate   # writes drizzle/NNNN_name.sql — commit it alongside the schema change
+bun run db:migrate    # applies it to your local database
+```
+
+`drizzle-kit migrate` is what the container entrypoint and CI run. **Never put `push` back in the deploy path.** It decides what to do by diffing against the live database, and any diff that drops a populated table or column stops on a confirmation prompt that a container cannot answer — then exits 0 having applied nothing, including the unrelated creates in the same diff. That shipped a production outage on 2026-08-04. `bun run db:push` is still fine for throwaway local iteration.
+
+`drizzle/0000_baseline.sql` uses `CREATE TABLE IF NOT EXISTS` and duplicate-tolerant constraint blocks so it is a no-op against databases that already held the schema before migrations existed. Later migrations are ordinary generated output.
+
 ## API conventions
 
 - Files live in `server/api/` and use Nitro's file-based routing (`*.get.ts`, `*.post.ts`, …)
@@ -152,6 +165,21 @@ Do not roll your own from `crypto.getRandomValues`. Note `x / 0xFFFFFFFF` is a s
 Format: `type/short-description-kebab-case`  
 Types: `bugfix/`, `feature/`  
 Always branch from an up-to-date `main`.
+
+## Before committing
+
+Both must be green before any commit or push:
+
+```bash
+bun run typecheck
+bun run test
+```
+
+Fix what they report. Type errors and failing tests get fixed, not committed around and not left for CI to catch. If a failure is genuinely pre-existing and unrelated, say so explicitly rather than staying quiet about a red check.
+
+`nuxt build` does **not** typecheck (`typescript.typeCheck` is not enabled), so a passing build proves nothing about types — run `typecheck` separately.
+
+This matters more than usual here: `main` is shared and a type error that lands on it fails CI for every other open branch until someone fixes it, and blocks all deploys (`checks` gates `image` gates `deploy` in `.github/workflows/ci.yml`).
 
 ## Commits
 

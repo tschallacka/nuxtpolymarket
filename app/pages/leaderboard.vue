@@ -3,8 +3,12 @@ interface LeaderboardUser {
   isCurrentUser: boolean
   name: string
   emblem: string | null
+  prestige: number
   balance: string
   bankBalance: number
+  inDebt: boolean
+  bailoutActive: boolean
+  bailoutRemaining: number
   gems: number
   gemValue: number
   rigLevel: number
@@ -95,7 +99,7 @@ function openDetails(user: LeaderboardUser) {
               </td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-2.5">
-                  <ProfileEmblem :emblem="u.emblem" :name="u.name" class="size-9 text-sm" />
+                  <ProfileEmblem :emblem="u.emblem" :name="u.name" :prestige="u.prestige" class="size-9 text-sm" />
                   <p class="max-w-40 truncate font-semibold">{{ u.name }}</p>
                   <LeaderboardYouBadge :show="u.isCurrentUser" />
                 </div>
@@ -109,8 +113,11 @@ function openDetails(user: LeaderboardUser) {
               </td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-3 whitespace-nowrap text-xs font-semibold">
-                  <UTooltip text="Wallet"><CoinBalance :value="u.balance" /></UTooltip>
+                  <UTooltip :text="u.inDebt ? 'Wallet — this player owes the bank' : 'Wallet'"><CoinBalance :value="u.balance" :danger="u.inDebt" /></UTooltip>
                   <UTooltip text="Bank"><BankBalance :value="u.bankBalance" /></UTooltip>
+                  <UTooltip v-if="u.bailoutActive" :text="`Took a bank bail-out — ${formatNumber(u.bailoutRemaining, false, 2)} still being levied back`">
+                    <UIcon name="i-lucide-life-buoy" class="size-4 shrink-0 text-warning" />
+                  </UTooltip>
                   <UTooltip text="Gems and gem value"><span class="inline-flex items-center gap-1"><GemBalance :value="u.gems" /><CoinBalance :value="u.gemValue" /></span></UTooltip>
                 </div>
               </td>
@@ -150,7 +157,8 @@ function openDetails(user: LeaderboardUser) {
       <template v-if="selectedUser" #body>
         <div class="space-y-5">
           <div class="flex items-center gap-3">
-            <ProfileEmblem :emblem="selectedUser.emblem" :name="selectedUser.name" class="size-12 text-lg" />
+            <ProfileEmblem :emblem="selectedUser.emblem" :name="selectedUser.name" :prestige="selectedUser.prestige" class="size-12 text-lg" />
+            <PrestigeBadge :level="selectedUser.prestige" size="md" />
             <p class="min-w-0 truncate font-semibold">{{ selectedUser.name }}</p>
           </div>
 
@@ -166,9 +174,16 @@ function openDetails(user: LeaderboardUser) {
               </div>
             </div>
             <div class="rounded-lg border border-default bg-elevated/40 p-3">
-              <CoinBalance :value="selectedUser.balance" class="mt-1 block text-base font-bold" />
+              <CoinBalance :value="selectedUser.balance" :danger="selectedUser.inDebt" class="mt-1 block text-base font-bold" />
               <p class="mt-0.5 text-[10px] text-muted">Wallet</p>
             </div>
+          </div>
+
+          <div v-if="selectedUser.bailoutActive" class="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-xs">
+            <UIcon name="i-lucide-life-buoy" class="size-4 shrink-0 text-warning" />
+            <span class="text-muted">Bail-out running —</span>
+            <CoinBalance :value="selectedUser.bailoutRemaining" :compact="false" :minimum-fraction-digits="2" class="font-semibold" />
+            <span class="text-muted">left to levy back</span>
           </div>
 
           <div>

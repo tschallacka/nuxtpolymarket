@@ -17,6 +17,11 @@ export const user = pgTable('user', {
   rake: numeric('rake', { precision: 19, scale: 4 }).notNull().default('0'),
   rakebackUnlocked: boolean('rakeback_unlocked').notNull().default(false),
   gems: integer('gems').notNull().default(0),
+  // Account-wide reset tier, 0-4. Raised only by server/utils/prestige.ts,
+  // which wipes every game table in the same transaction.
+  prestige: integer('prestige').notNull().default(0),
+  // Paid out on each ascent (5/10/15/20) and spent in the prestige shop.
+  prestigeTokens: integer('prestige_tokens').notNull().default(0),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at')
     .defaultNow()
@@ -381,7 +386,15 @@ export const bankState = pgTable('bank_state', {
   principal: numeric('principal', { precision: 19, scale: 4 }).notNull().default('0'),
   maxPrincipal: numeric('max_principal', { precision: 19, scale: 4 }).notNull().default('0'),
   loanPrincipal: numeric('loan_principal', { precision: 19, scale: 4 }).notNull().default('0'),
-  lastSettledAt: timestamp('last_settled_at').defaultNow().notNull()
+  lastSettledAt: timestamp('last_settled_at').defaultNow().notNull(),
+  // Bail-out ledger. The debt is lifted off `balance` and parked here: the 40%
+  // levy pays it down into `bailoutRepaid`, and the penalty ends at whichever
+  // comes first — `bailoutUntil` lapsing or the two meeting. `bailoutUntil` is
+  // nulled the moment it is settled, which is also the flag for "no penalty".
+  bailoutAt: timestamp('bailout_at'),
+  bailoutUntil: timestamp('bailout_until'),
+  bailoutDebt: numeric('bailout_debt', { precision: 19, scale: 4 }).notNull().default('0'),
+  bailoutRepaid: numeric('bailout_repaid', { precision: 19, scale: 4 }).notNull().default('0')
 })
 
 /** Snapshot only at bank actions; the UI projects the latest point in real time. */
@@ -394,14 +407,47 @@ export const bankHistory = pgTable('bank_history', {
   createdAt: timestamp('created_at').defaultNow().notNull()
 }, t => [index('bank_history_userId_createdAt_idx').on(t.userId, t.createdAt)])
 
-export const blackjackSessions = pgTable('blackjack_sessions', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text('user_id').notNull().unique().references(() => user.id, { onDelete: 'cascade' }),
-  state: jsonb('state').notNull(),
-  bet: numeric('bet', { precision: 19, scale: 4 }).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new Date()).notNull()
-})
+/**
+ * Escrow for the live table. Every stake — opening bet, double, split, insurance
+ * — writes a row in the same transaction as its debit, and settlement marks the
+ * row settled in the same transaction as the payout. A process that dies
+ * mid-round therefore leaves its unsettled stakes visible, and the recovery
+ * sweep in server/plugins refunds them instead of pocketing the player's money.
+ */
+export const liveBlackjackWagers = pgTable(
+  'live_blackjack_wagers',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+    roundId: integer('round_id').notNull(),
+    amount: numeric('amount', { precision: 19, scale: 4 }).notNull(),
+    kind: text('kind').notNull(),
+    settled: boolean('settled').notNull().default(false),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [index('live_blackjack_wagers_settled_createdAt_idx').on(table.settled, table.createdAt)]
+)
+
+/**
+ * Escrow for every table game built on the shared LiveTable base — roulette,
+ * baccarat, three card poker, casino hold'em. Same contract as the blackjack
+ * table above, with a `game` column instead of a table per game, so one
+ * recovery sweep covers all of them.
+ */
+export const tableWagers = pgTable(
+  'table_wagers',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    game: text('game').notNull(),
+    userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+    roundId: integer('round_id').notNull(),
+    amount: numeric('amount', { precision: 19, scale: 4 }).notNull(),
+    kind: text('kind').notNull(),
+    settled: boolean('settled').notNull().default(false),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [index('table_wagers_settled_createdAt_idx').on(table.settled, table.createdAt)]
+)
 
 // ─── Xeno ──────────────────────────────────────────────────────────────────
 
@@ -513,11 +559,30 @@ export const colonyState = pgTable('colony_state', {
    * nutrition <= nutritionMax).
    */
   gemNutrition: integer('gem_nutrition').notNull().default(0),
-  lastSettledAt: timestamp('last_settled_at').defaultNow().notNull(),
-  /** The single builder's current job, if any — cleared on collect. */
-  builderTrackId: text('builder_track_id'),
-  builderStartedAt: timestamp('builder_started_at')
+  lastSettledAt: timestamp('last_settled_at').defaultNow().notNull()
 })
+
+/**
+ * One row = one builder currently working. A colony has BASE_BUILDER_COUNT
+ * builders plus whatever the prestige shop's Labour Contract granted, so the
+ * number of concurrent rows is capped by the caller, not the schema.
+ *
+ * The unique (user, track) constraint is the real guard, not a convenience:
+ * two builders on the same track would each collect "level N+1" and the
+ * player would pay once for a level they got twice. HABITAT_BUILDER_JOB_ID
+ * occupies the same namespace, so the habitat can also only ever have one
+ * builder on it.
+ */
+export const colonyBuilderJobs = pgTable('colony_builder_jobs', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  /** An UpgradeTrackId, or HABITAT_BUILDER_JOB_ID for a habitat level-up. */
+  trackId: text('track_id').notNull(),
+  startedAt: timestamp('started_at').defaultNow().notNull()
+}, t => [
+  index('colony_builder_jobs_userId_idx').on(t.userId),
+  unique('colony_builder_jobs_unique').on(t.userId, t.trackId)
+])
 
 /**
  * One row = one bug instance. Buying a bug puts it in the player's inventory
@@ -595,6 +660,31 @@ export const colonyBugResearch = pgTable('colony_bug_research', {
 }, t => [
   index('colony_bug_research_userId_idx').on(t.userId),
   unique('colony_bug_research_unique').on(t.typeId, t.userId)
+])
+
+// ─── Prestige shop ────────────────────────────────────────────────────────────
+
+/**
+ * How many times this run has bought each prestige shop item. One row per
+ * (user, item); missing means zero owned.
+ *
+ * This carries a `user_id` and is deliberately NOT on the prestige preserve
+ * list, so ascending wipes it along with everything else the tokens bought.
+ * That is what makes the token refund honest: the perks die in the same
+ * transaction that hands the allowance back (see server/utils/prestige.ts).
+ *
+ * Some items apply their effect once, at purchase (plants, bugs, agents,
+ * levels); others are read live from this count (the miner level ceilings,
+ * see minerRigMaxLevel). Both kinds vanish here.
+ */
+export const prestigePurchases = pgTable('prestige_purchases', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  itemId: text('item_id').notNull(),
+  count: integer('count').notNull().default(0)
+}, t => [
+  index('prestige_purchases_userId_idx').on(t.userId),
+  unique('prestige_purchases_unique').on(t.userId, t.itemId)
 ])
 
 // ─── Hack Ops ─────────────────────────────────────────────────────────────────
