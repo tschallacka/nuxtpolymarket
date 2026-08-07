@@ -160,6 +160,33 @@ describe('Pathwarden authoritative world', () => {
         expect(world.getEntities()[0]!.data.components).toMatchObject({ towerType: 'mortar' })
     })
 
+    it('accounts for queued purchases before accepting another placement', () => {
+        const world = new PathwardenWorld({
+            runId: 'run-5c',
+            revision: 0,
+            realm: 1,
+            seed: 1,
+            mapPlan,
+            gameState: null,
+            boosts: {
+                startingLives: 20,
+                startingAether: 120,
+                damageMultiplier: 1,
+                rangeMultiplier: 1,
+                rateMultiplier: 1,
+                bountyMultiplier: 1,
+                arcanistLevel: 0
+            }
+        })
+        const road = mapPlan.rooms.find(room => room.id === mapPlan.castleRoomId)!.roadCells
+        const candidates = Array.from({ length: 8 }, (_, index) => ({ col: road[0]!.col + index - 3, row: road[0]!.row + 3 }))
+            .filter(cell => world.canApply({ type: 'place-tower', ...cell }))
+        expect(candidates.length).toBeGreaterThanOrEqual(2)
+        expect(world.enqueue(1, { type: 'place-tower', ...candidates[0]! })).toBe(true)
+        expect(world.canApply({ type: 'place-tower', ...candidates[1]! })).toBe(false)
+        expect(world.commandRejectionReason({ type: 'place-tower', ...candidates[1]! })).toBe('Not enough Aether.')
+    })
+
     it('applies building mutations only at the authoritative tick boundary', () => {
         vi.useFakeTimers()
         const world = new PathwardenWorld({ runId: 'run-6', revision: 0, realm: 1, seed: 1, mapPlan, gameState: null })

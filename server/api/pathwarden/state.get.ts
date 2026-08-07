@@ -74,7 +74,7 @@ export default defineEventHandler(async (event) => {
                 rushCost: pathwardenCooldownRushCost(cooldownRemainingMs)
             }
             : null,
-        activeRun: state.runStartedAt
+         activeRun: state.runStartedAt && existingRun
             ? {
                 id: existingRun?.id ?? null,
                 startedAt: state.runStartedAt,

@@ -51,6 +51,7 @@ export interface PathwardenWorldSnapshot {
     globalRelics?: Array<{ family: string, level: number, power: number }>
     paused: boolean
     entityCount: number
+    towerCosts?: Record<string, number>
     claimedRoomIds: string[]
     revealedCells: Array<{ col: number, row: number }>
 }
@@ -428,6 +429,12 @@ export function encodeWorldSnapshot(snapshot: PathwardenWorldSnapshot, header: P
     }
     payload.bool(snapshot.paused)
     payload.varUint(snapshot.entityCount)
+    const towerCosts = Object.entries(snapshot.towerCosts ?? {})
+    payload.varUint(towerCosts.length)
+    for (const [towerType, cost] of towerCosts) {
+        payload.string(towerType, 32)
+        payload.u32(Math.max(0, Math.round(cost)))
+    }
     if (includeMapState) {
         payload.varUint(snapshot.claimedRoomIds.length)
         for (const roomId of snapshot.claimedRoomIds) payload.string(roomId, 96)
@@ -642,6 +649,10 @@ export function decodePacket(value: ArrayBufferLike | Uint8Array): PathwardenDec
             })),
             paused: payloadReader.bool(),
             entityCount: payloadReader.varUint(),
+            towerCosts: Object.fromEntries(Array.from({ length: payloadReader.varUint() }, () => [
+                payloadReader.string(32),
+                payloadReader.u32()
+            ])),
             claimedRoomIds: (header.flags & 1) === 0 ? Array.from({ length: payloadReader.varUint() }, () => payloadReader.string(96)) : [],
             revealedCells: (header.flags & 1) === 0 ? Array.from({ length: payloadReader.varUint() }, () => ({ col: payloadReader.u16(), row: payloadReader.u16() })) : []
         }

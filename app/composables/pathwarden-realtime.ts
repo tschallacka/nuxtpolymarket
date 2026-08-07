@@ -55,6 +55,7 @@ export function usePathwardenRealtime() {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let intentionalClose = false
     let lastResyncAt = 0
+    let awaitingInitialSnapshot = true
 
     function recordDebug(event: string, fields: Record<string, unknown> = {}) {
         debugLog?.record(event, fields)
@@ -86,17 +87,27 @@ export function usePathwardenRealtime() {
             const payload = event.data instanceof Blob
                 ? await event.data.arrayBuffer()
                 : event.data as ArrayBuffer
-            if (payload instanceof ArrayBuffer) {
+            if (!(payload instanceof ArrayBuffer)) return
+            const bytes = new Uint8Array(payload)
+            // The Nuxt development websocket adapter can expose its six-byte
+            // frame prefix to the browser as well as to the server handler.
+            const payloadOffset = bytes[0] === 0x50 ? 0 : bytes[6] === 0x50 ? 6 : 0
+            const normalizedBytes = new Uint8Array(bytes.byteLength - payloadOffset)
+            normalizedBytes.set(bytes.subarray(payloadOffset))
+            const normalizedPayload = normalizedBytes.buffer
+            if (normalizedPayload instanceof ArrayBuffer) {
                 recordDebug('packet.received', {
                     direction: 'in',
-                    ...pathwardenPacketMetadata(payload)
+                    ...pathwardenPacketMetadata(normalizedPayload)
                 })
             }
-            if (!(payload instanceof ArrayBuffer) || new Uint8Array(payload)[0] !== 0x50) return
-            const packet = decodePacket(payload)
+            if (new Uint8Array(normalizedPayload)[0] !== 0x50) return
+            const packet = decodePacket(normalizedPayload)
+            status.value = 'connected'
+            if (lastError.value === 'Invalid Pathwarden packet magic') lastError.value = null
             recordDebug('packet.decoded', {
                 direction: 'in',
-                packetKind: pathwardenPacketMetadata(payload).packetKind,
+                packetKind: pathwardenPacketMetadata(normalizedPayload).packetKind,
                 packetKindCode: packet.header.kind,
                 packetSequence: packet.header.sequence,
                 tick: packet.header.tick,
@@ -113,7 +124,9 @@ export function usePathwardenRealtime() {
                     : decoded
                 const wasDifferent = snapshot.value && (snapshot.value.tick > next.tick || snapshot.value.phase !== next.phase || snapshot.value.wave !== next.wave)
                 if (wasDifferent) corrections.value += 1
-                if (snapshot.value) {
+                if (awaitingInitialSnapshot) {
+                    awaitingInitialSnapshot = false
+                } else if (snapshot.value) {
                     const tickGap = next.tick - snapshot.value.tick
                     if (tickGap < 0) {
                         staleSnapshots.value += 1
@@ -219,7 +232,8 @@ export function usePathwardenRealtime() {
                 lastAcknowledgedInput.value = Math.max(lastAcknowledgedInput.value, inputSequence)
                 nextInputSequence = Math.max(nextInputSequence, inputSequence + 1)
                 updatePredictionAge()
-                if (!payload?.accepted && payload?.reason) lastError.value = payload.reason
+                if (payload?.accepted) lastError.value = null
+                else if (payload?.reason) lastError.value = payload.reason
                 recordDebug(payload?.accepted ? 'command.acknowledged' : 'command.rejected', {
                     inputSequence,
                     accepted: payload?.accepted ?? false,
@@ -250,6 +264,7 @@ export function usePathwardenRealtime() {
         pending.clear()
         sentAt.clear()
         updatePredictionAge()
+        awaitingInitialSnapshot = true
         snapshot.value = null
         mapPlan.value = null
         entities.value = []
@@ -277,6 +292,7 @@ export function usePathwardenRealtime() {
             recordDebug('socket.connecting', { runId })
             socket.onopen = () => {
                 status.value = 'connected'
+                awaitingInitialSnapshot = true
                 recordDebug('socket.open', { runId })
                 const hello = encodeHello()
                 recordDebug('packet.sent', { direction: 'out', ...pathwardenPacketMetadata(hello) })
@@ -299,10 +315,12 @@ export function usePathwardenRealtime() {
                 lastError.value = 'Pathwarden gameplay connection failed'
                 recordDebug('socket.error', { runId, error: lastError.value })
             }
-            socket.onclose = () => {
+            socket.onclose = event => {
                 socket = null
-                recordDebug('socket.close', { runId, intentional: intentionalClose })
+                recordDebug('socket.close', { runId, intentional: intentionalClose, code: event.code, reason: event.reason })
                 if (!intentionalClose && activeRunId === runId) {
+                    lastError.value = `Pathwarden socket closed (${event.code}${event.reason ? `: ${event.reason}` : ''})`
+                    awaitingInitialSnapshot = true
                     status.value = 'connecting'
                     reconnectTimer = setTimeout(() => {
                         reconnectTimer = null

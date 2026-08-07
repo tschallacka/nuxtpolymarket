@@ -21,7 +21,8 @@ export default defineEventHandler(async (event) => {
                 runStartedAt: null,
                 runRealmSnapshot: null,
                 runPowerSnapshot: null,
-                runSurgedSnapshot: null
+                runSurgedSnapshot: null,
+                lastRunFinishedAt: null
             })
             .where(eq(pathwardenState.userId, userId))
         return { cleared: true }

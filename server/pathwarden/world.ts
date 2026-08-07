@@ -59,6 +59,10 @@ interface QueuedCommand {
     command: PathwardenInputCommand
 }
 
+type PlacementValidation =
+    | { allowed: true, cost: number }
+    | { allowed: false, reason: string }
+
 const TICK_MS = 50
 
 function initialPhase(state: PathwardenGameState | null): PathwardenPhase {
@@ -294,15 +298,22 @@ export class PathwardenWorld {
         return this.commands.length
     }
 
+    commandRejectionReason(command: PathwardenInputCommand) {
+        if (command.type === 'place-tower') {
+            const projected = this.projectedPlacementState()
+            const selectedTower = command.tower ?? projected.selectedTower
+            const validation = this.validatePlacement(command, selectedTower)
+            if (!validation.allowed) return validation.reason
+            const cost = pathwardenTowerPurchaseCost(selectedTower, projected.purchases[selectedTower] ?? 0)
+            if (projected.aether < cost) return 'Not enough Aether.'
+            return null
+        }
+        return null
+    }
+
     canApply(command: PathwardenInputCommand) {
         if (command.type === 'place-tower') {
-            const queuedSelection = [...this.commands]
-                .reverse()
-                .find(queued => queued.command.type === 'select-tower')
-            const selectedTower = command.tower ?? (queuedSelection?.command.type === 'select-tower'
-                ? queuedSelection.command.tower
-                : this.selectedTower)
-            return this.validatePlacement(command, selectedTower).allowed
+            return this.commandRejectionReason(command) === null
         }
         if (command.type === 'upgrade-tower') return this.validateTower(command.id, 'upgrade')
         if (command.type === 'fuse-tower') return this.validateFuse(command.sourceId, command.targetId)
@@ -321,6 +332,27 @@ export class PathwardenWorld {
         return command.type === 'select-tower' && PATHWARDEN_DEFENSE_BLUEPRINTS.some(defense => defense.id === command.tower)
     }
 
+    private projectedPlacementState() {
+        const purchases = { ...this.towerPurchases }
+        let aether = this.state.aether
+        let selectedTower = this.selectedTower
+        for (const queued of this.commands) {
+            if (queued.command.type === 'select-tower') {
+                selectedTower = queued.command.tower
+                continue
+            }
+            if (queued.command.type !== 'place-tower') continue
+            const towerType = queued.command.tower ?? selectedTower
+            const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === towerType)
+            if (!defense) continue
+            const cost = pathwardenTowerPurchaseCost(towerType, purchases[towerType] ?? 0)
+            aether -= cost
+            purchases[towerType] = (purchases[towerType] ?? 0) + 1
+            selectedTower = towerType
+        }
+        return { aether, purchases, selectedTower }
+    }
+
     getChoiceOffer() {
         return this.choiceKind
             ? { kind: this.choiceKind, choices: [...this.choices], choiceKeys: [...this.choiceKeys], offerRevision: this.choiceRevision }
@@ -332,6 +364,7 @@ export class PathwardenWorld {
             ...this.state,
             maxLives: this.maxLives,
             globalRelics: Object.entries(this.globalRelics).map(([family, relic]) => ({ family, level: relic.level, power: relic.power })),
+            towerCosts: Object.fromEntries(PATHWARDEN_DEFENSE_BLUEPRINTS.map(defense => [defense.id, this.towerCost(defense.id)])),
             claimedRoomIds: [...this.claimedRooms],
             revealedCells: [...this.revealed].map(key => {
                 const [col = 0, row = 0] = key.split(':').map(Number)
@@ -757,23 +790,7 @@ export class PathwardenWorld {
             this.state.phase = command.type === 'relic-choice' ? 'planning' : 'planning'
             return true
         }
-        const placement = this.validatePlacement(command)
-        if (!placement.allowed) return false
-        const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === this.selectedTower)!
-        const cost = placement.cost ?? 0
-        this.state.aether -= cost
-        this.spawnEntity({
-            type: 1,
-            components: {
-                towerType: this.selectedTower,
-                col: command.col,
-                row: command.row,
-                invested: cost,
-                targeting: 'first'
-            }
-        }, command.col, command.row)
-        this.towerPurchases[this.selectedTower] = Math.max(0, Math.floor(this.towerPurchases[this.selectedTower] ?? 0)) + 1
-        return Boolean(defense)
+        return false
     }
 
     private simulateWave() {
@@ -1158,7 +1175,7 @@ export class PathwardenWorld {
         return `${col}:${row}`
     }
 
-    private validatePlacement(command: Extract<PathwardenInputCommand, { type: 'place-tower' }>, selectedTower = command.tower ?? this.selectedTower) {
+    private validatePlacement(command: Extract<PathwardenInputCommand, { type: 'place-tower' }>, selectedTower = command.tower ?? this.selectedTower): PlacementValidation {
         const key = this.cellKey(command.col, command.row)
         const defense = PATHWARDEN_DEFENSE_BLUEPRINTS.find(candidate => candidate.id === selectedTower)
         if (this.state.phase !== 'planning') return { allowed: false, reason: 'Towers can only be placed during planning.' }

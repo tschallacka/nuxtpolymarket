@@ -3,6 +3,7 @@ import { db } from '#server/database'
 import { pathwardenState } from '#server/database/schema'
 import { requireUserId } from '#server/utils/auth'
 import { debit } from '#server/utils/balance'
+import { reconcileOrphanedPathwardenRun } from '#server/utils/pathwarden'
 import { PATHWARDEN_DEFENSE_BLUEPRINTS } from '#shared/utils/gamelogic/pathwarden'
 
 export default defineEventHandler(async (event) => {
@@ -19,9 +20,10 @@ export default defineEventHandler(async (event) => {
         await tx.execute(sql`SELECT id FROM pathwarden_state WHERE user_id = ${userId} FOR UPDATE`)
         const state = await tx.query.pathwardenState.findFirst({ where: eq(pathwardenState.userId, userId) })
         if (!state) throw createError({ statusCode: 404, statusMessage: 'Pathwarden state not initialized' })
-        if (state.runStartedAt) throw createError({ statusCode: 400, statusMessage: 'Finish the active march before buying blueprints' })
+        const reconciledState = await reconcileOrphanedPathwardenRun(tx, userId, state)
+        if (reconciledState.runStartedAt) throw createError({ statusCode: 400, statusMessage: 'Finish the active march before buying blueprints' })
 
-        const owned = Array.from(new Set(['bolt', 'mortar', 'frost', ...(state.ownedDefenseIds ?? [])]))
+        const owned = Array.from(new Set(['bolt', 'mortar', 'frost', ...(reconciledState.ownedDefenseIds ?? [])]))
         if (owned.includes(blueprint.id)) throw createError({ statusCode: 400, statusMessage: 'Blueprint already owned' })
         if (!debugMode) await debit(userId, blueprint.coinCost.toFixed(4), 'pathwarden:defense', tx)
         await tx.update(pathwardenState)

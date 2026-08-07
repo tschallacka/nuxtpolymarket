@@ -50,9 +50,16 @@ export default defineEventHandler(async (event) => {
             // than trapping the player behind a 409 (this is the recovery path
             // that used to live, as a write, inside the run.get GET handler).
             const [existing] = await tx.select({
+                id: pathwardenRuns.id,
                 saveVersion: pathwardenRuns.saveVersion,
                 generatorVersion: pathwardenRuns.generatorVersion
             }).from(pathwardenRuns).where(eq(pathwardenRuns.userId, userId))
+            if (!existing) {
+                await tx.update(pathwardenState)
+                    .set({ runStartedAt: null, runRealmSnapshot: null, runPowerSnapshot: null, runSurgedSnapshot: null })
+                    .where(eq(pathwardenState.userId, userId))
+                state.runStartedAt = null
+            }
             const resumable = existing
                 && existing.saveVersion === PATHWARDEN_SAVE_VERSION
                 && existing.generatorVersion === PATHWARDEN_GENERATOR_VERSION

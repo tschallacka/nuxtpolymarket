@@ -657,6 +657,9 @@ export class PathwardenEngine {
   private enemies: Enemy[] = []
   private projectiles: Projectile[] = []
   private serverAuthoritative = false
+  private authoritativeSnapshotReady = false
+  private allowCommandsBeforeSnapshot = false
+  private authoritativeTowerCosts: Record<string, number> | null = null
   private authoritativeChoiceRevision = 0
   private particles: Particle[] = []
   private appliedAuthoritativeEventIds = new Set<number>()
@@ -1087,6 +1090,7 @@ export class PathwardenEngine {
     streak?: number
     flawlessWaves?: number
     paused: boolean
+    towerCosts?: Record<string, number>
     globalRelics?: ReadonlyArray<{ family: string, level: number, power: number }>
     claimedRoomIds?: readonly string[]
     revealedCells?: ReadonlyArray<{ col: number, row: number }>
@@ -1101,6 +1105,8 @@ export class PathwardenEngine {
     this.streak = Math.max(0, authoritative.streak ?? this.streak)
     this.flawlessWaves = Math.max(0, authoritative.flawlessWaves ?? this.flawlessWaves)
     this.paused = authoritative.paused
+    this.authoritativeSnapshotReady = true
+    if (authoritative.towerCosts) this.authoritativeTowerCosts = { ...authoritative.towerCosts }
     this.canSellRelics = ['planning', 'path', 'upgrade'].includes(this.phase)
     if (this.phase !== 'planning') {
       this.placementMode = false
@@ -1170,8 +1176,14 @@ export class PathwardenEngine {
     this.render()
   }
 
-  setServerAuthoritative(enabled = true) {
+  setServerAuthoritative(enabled = true, allowCommandsBeforeSnapshot = false) {
     this.serverAuthoritative = enabled
+    this.authoritativeSnapshotReady = false
+    this.allowCommandsBeforeSnapshot = allowCommandsBeforeSnapshot
+  }
+
+  setAllowCommandsBeforeSnapshot(enabled: boolean) {
+    this.allowCommandsBeforeSnapshot = enabled
   }
 
   setAuthoritativeChoiceRevision(revision: number) {
@@ -2653,6 +2665,8 @@ export class PathwardenEngine {
   }
 
   private towerCost(type: PathwardenTowerType) {
+    const authoritativeCost = this.authoritativeTowerCosts?.[type]
+    if (authoritativeCost !== undefined) return authoritativeCost
     return pathwardenTowerPurchaseCost(type, this.towerPurchases[type] ?? 0)
   }
 
@@ -4509,6 +4523,46 @@ export class PathwardenEngine {
     const cell = this.pointerCell(event)
     if (!cell) return
     if (this.serverAuthoritative && this.phase === 'planning') {
+      if (!this.authoritativeSnapshotReady) {
+        if (this.allowCommandsBeforeSnapshot) {
+          const placement = this.placementStatus(cell)
+          const cost = this.towerCost(this.selectedTower)
+          if (!placement.allowed) {
+            this.message = placement.reason
+            this.emitState()
+            return
+          }
+          if (this.aether < cost) {
+            this.message = `Need ${cost - this.aether} more Aether.`
+            this.emitState()
+            return
+          }
+          this.callbacks.onCommand?.({ type: 'place-tower', tower: this.selectedTower, col: cell.col, row: cell.row })
+          this.message = `${towerStats(this.selectedTower).name} placement requested.`
+          this.emitState()
+          return
+        }
+        this.message = 'Syncing the Warden map before placement.'
+        this.emitState()
+        return
+      }
+      if (!this.revealed.has(cellKey(cell))) {
+        this.message = 'The mist still covers that ground.'
+        this.emitState()
+        return
+      }
+      const placement = this.placementStatus(cell)
+      const cost = this.towerCost(this.selectedTower)
+      if (!placement.allowed) {
+        this.message = placement.reason
+        this.emitState()
+        return
+      }
+      if (this.aether < cost) {
+        this.message = `Need ${cost - this.aether} more Aether.`
+        this.emitState()
+        return
+      }
       this.callbacks.onCommand?.({ type: 'place-tower', tower: this.selectedTower, col: cell.col, row: cell.row })
       this.message = `${towerStats(this.selectedTower).name} placement requested.`
       this.emitState()

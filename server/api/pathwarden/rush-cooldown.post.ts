@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { db } from '#server/database'
-import { pathwardenState } from '#server/database/schema'
+import { pathwardenRuns, pathwardenState } from '#server/database/schema'
 import { requireUserId } from '#server/utils/auth'
 import { debitGems } from '#server/utils/balance'
 import { getLockedPathwardenState } from '#server/utils/pathwarden'
@@ -15,7 +15,16 @@ export default defineEventHandler(async (event) => {
 
     return db.transaction(async (tx) => {
         const state = await getLockedPathwardenState(tx, userId)
-        if (state.runStartedAt) throw createError({ statusCode: 400, statusMessage: 'Cannot rush recovery during a march' })
+        const [run] = await tx.select({ id: pathwardenRuns.id })
+            .from(pathwardenRuns)
+            .where(eq(pathwardenRuns.userId, userId))
+            .limit(1)
+        if (state.runStartedAt && run) throw createError({ statusCode: 400, statusMessage: 'Cannot rush recovery during a march' })
+        if (state.runStartedAt && !run) {
+            await tx.update(pathwardenState)
+                .set({ runStartedAt: null, runRealmSnapshot: null, runPowerSnapshot: null, runSurgedSnapshot: null })
+                .where(eq(pathwardenState.userId, userId))
+        }
 
         const remainingMs = pathwardenRunCooldownRemainingMs(state.lastRunFinishedAt, Date.now())
         if (remainingMs <= 0) throw createError({ statusCode: 400, statusMessage: 'The wardens are already ready' })

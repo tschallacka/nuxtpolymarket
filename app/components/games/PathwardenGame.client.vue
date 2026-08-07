@@ -1002,6 +1002,7 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
     onCommand: (command: PathwardenInputCommand) => {
       void (async () => {
         if (!activeRunId.value && !await ensureRunStarted()) return
+        engine?.setAllowCommandsBeforeSnapshot(false)
         realtime.send(command)
       })()
     }
@@ -1012,6 +1013,7 @@ function createGame(restore?: PathwardenEngineRestore, startEngine = true) {
   // The local engine is a renderer and presentation controller even before a
   // run exists. Gameplay commands must never fall back to a local simulation.
   engine.setServerAuthoritative()
+  engine.setAllowCommandsBeforeSnapshot(!activeRunId.value)
   if (startEngine) engine.start()
 }
 
@@ -1286,6 +1288,14 @@ watch(() => [snapshot.value.phase, snapshot.value.wave] as const, ([phase, wave]
           @dragover.prevent
           @drop.prevent="dropRelic"
         />
+        <div
+          v-if="isDev"
+          data-pathwarden-transport-debug
+          class="absolute bottom-2 left-2 z-30 max-w-[calc(100%-1rem)] rounded-md border border-cyan-400/40 bg-slate-950/85 px-2 py-1 font-mono text-[10px] text-cyan-100"
+        >
+          WS {{ realtime.status }} · pending {{ realtime.pendingInputs }} · ack {{ realtime.lastAcknowledgedInput }}
+          <span v-if="realtime.lastError"> · {{ realtime.lastError }}</span>
+        </div>
         <div v-if="mapGenerating" class="map-generation-overlay absolute inset-0 z-40 flex items-center justify-center p-5 sm:p-10">
           <div class="map-generation-panel w-full max-w-2xl rounded-[1.4rem] border border-violet-200/30 bg-slate-950/80 p-5 text-center shadow-2xl backdrop-blur-md sm:p-8">
             <svg class="mx-auto h-56 w-full max-w-lg" viewBox="0 0 640 300" role="img" aria-label="An angry god attacks the castle with fog while the map is generated">

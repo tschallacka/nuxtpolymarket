@@ -52,6 +52,8 @@ interface ActiveSession {
 }
 
 const sessions = new Map<string, ActiveSession>()
+const openingPeers = new Set<Peer>()
+const pendingMessages = new Map<Peer, ArrayBufferLike[]>()
 const MAX_COMMANDS_PER_SECOND = 120
 
 export function hasPathwardenSessionForUser(userId: string) {
@@ -227,7 +229,7 @@ function handleCommand(session: ActiveSession, command: PathwardenInputCommand, 
     session.commandsInWindow++
     if (!session.world.canApply(command)) {
         pathwardenMetricCommand(false)
-        const reason = 'Command is not valid in the current Pathwarden state'
+        const reason = session.world.commandRejectionReason(command) ?? 'Command is not valid in the current Pathwarden state'
         recordPathwardenServerDebug('command.rejected', {
             runId: session.runId,
             inputSequence,
@@ -258,19 +260,21 @@ function handleCommand(session: ActiveSession, command: PathwardenInputCommand, 
 }
 
 export async function openPathwardenSession(peer: Peer) {
-    const session = await createSession(peer)
-    if (!session) return
-    recordPathwardenServerDebug('socket.open', { runId: session.runId })
-    const previous = sessions.get(session.runId)
-    pathwardenMetricConnection(Boolean(previous))
-    previous?.peer.close(4009, 'Replaced by a newer Pathwarden session')
-    if (previous) {
-        previous.world.stop()
-        previous.lastPersistedTick = -1
-        persistWorld(previous, previous.world.getSnapshot().tick, true)
-        pathwardenMetricDisconnection()
-    }
-    session.world.setChangeHandler((snapshot, entities, events: PathwardenGameplayEvent[]) => {
+    openingPeers.add(peer)
+    try {
+        const session = await createSession(peer)
+        if (!session) return
+        recordPathwardenServerDebug('socket.open', { runId: session.runId })
+        const previous = sessions.get(session.runId)
+        pathwardenMetricConnection(Boolean(previous))
+        previous?.peer.close(4009, 'Replaced by a newer Pathwarden session')
+        if (previous) {
+            previous.world.stop()
+            previous.lastPersistedTick = -1
+            persistWorld(previous, previous.world.getSnapshot().tick, true)
+            pathwardenMetricDisconnection()
+        }
+        session.world.setChangeHandler((snapshot, entities, events: PathwardenGameplayEvent[]) => {
         const nextEntities = entities.map(entityState)
         const upserts = nextEntities.filter(entity => {
             const previous = session.lastEntities.get(entity.id)
@@ -311,33 +315,37 @@ export async function openPathwardenSession(peer: Peer) {
         const offer = session.world.getChoiceOffer()
         if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: snapshot.tick }, offer.offerRevision, offer.choiceKeys))
         persistWorld(session, snapshot.tick, snapshot.phase === 'victory' || snapshot.phase === 'defeat' || snapshot.phase === 'cashout')
-    })
-    session.world.setAmbientStoryHandler(storyId => {
-        void db.transaction(tx => recordPathwardenAmbientStory(tx, session.userId, storyId)).catch(() => {})
-    })
-    session.world.setTickMetricsHandler(pathwardenMetricTick)
-    sessions.set(session.runId, session)
-    send(session, encodeHelloAck({ sequence: session.nextPacketSequence++ }))
-    for (const packet of encodeMapSnapshotChunks(session.mapPlan, session.nextPacketSequence)) {
-        send(session, packet)
-        session.nextPacketSequence++
+        })
+        session.world.setAmbientStoryHandler(storyId => {
+            void db.transaction(tx => recordPathwardenAmbientStory(tx, session.userId, storyId)).catch(() => {})
+        })
+        session.world.setTickMetricsHandler(pathwardenMetricTick)
+        sessions.set(session.runId, session)
+        send(session, encodeHelloAck({ sequence: session.nextPacketSequence++ }))
+        for (const packet of encodeMapSnapshotChunks(session.mapPlan, session.nextPacketSequence)) {
+            send(session, packet)
+            session.nextPacketSequence++
+        }
+        const initialEntities = session.world.getEntities().map(entityState)
+        session.lastEntities = new Map(initialEntities.map(entity => [entity.id, entity]))
+        const initialMap = mapState(session.world.getSnapshot())
+        session.lastClaimedRoomIds = initialMap.claimedRoomIds
+        session.lastRevealedCells = initialMap.revealedCells
+        send(session, encodeEntitySnapshot(initialEntities, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }))
+        send(session, encodeWorldSnapshot(session.world.getSnapshot(), { sequence: session.nextPacketSequence++ }))
+        const offer = session.world.getChoiceOffer()
+        if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }, offer.offerRevision, offer.choiceKeys))
+        session.world.start()
+        const queued = pendingMessages.get(peer) ?? []
+        pendingMessages.delete(peer)
+        for (const payload of queued) processPathwardenPayload(session, payload)
+    } finally {
+        openingPeers.delete(peer)
+        if (![...sessions.values()].some(session => session.peer === peer)) pendingMessages.delete(peer)
     }
-    const initialEntities = session.world.getEntities().map(entityState)
-    session.lastEntities = new Map(initialEntities.map(entity => [entity.id, entity]))
-    const initialMap = mapState(session.world.getSnapshot())
-    session.lastClaimedRoomIds = initialMap.claimedRoomIds
-    session.lastRevealedCells = initialMap.revealedCells
-    send(session, encodeEntitySnapshot(initialEntities, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }))
-    send(session, encodeWorldSnapshot(session.world.getSnapshot(), { sequence: session.nextPacketSequence++ }))
-    const offer = session.world.getChoiceOffer()
-    if (offer) send(session, encodeChoiceOffer(offer.kind, offer.choices, { sequence: session.nextPacketSequence++, tick: session.world.getSnapshot().tick }, offer.offerRevision, offer.choiceKeys))
-    session.world.start()
 }
 
-export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): ArrayBuffer | SharedArrayBuffer }) {
-    const session = [...sessions.values()].find(candidate => candidate.peer === peer)
-    if (!session) return
-    const rawPayload = message.arrayBuffer()
+function processPathwardenPayload(session: ActiveSession, rawPayload: ArrayBufferLike) {
     recordPathwardenServerDebug('packet.received', {
         runId: session.runId,
         direction: 'in',
@@ -359,7 +367,42 @@ export function handlePathwardenMessage(peer: Peer, message: { arrayBuffer(): Ar
     }
 }
 
+function normalizePathwardenPayload(message: { uint8Array(): Uint8Array }) {
+    const bytes = message.uint8Array()
+    // The Nuxt development websocket adapter can expose the six-byte frame
+    // prefix instead of the protocol payload. Production frames start at 0.
+    const payloadOffset = bytes[0] === 0x50 ? 0 : bytes[6] === 0x50 ? 6 : 0
+    const payload = new Uint8Array(bytes.byteLength - payloadOffset)
+    payload.set(bytes.subarray(payloadOffset))
+    return payload.buffer
+}
+
+export function handlePathwardenMessage(peer: Peer, message: { uint8Array(): Uint8Array }) {
+    const rawPayload = normalizePathwardenPayload(message)
+    const session = [...sessions.values()].find(candidate => candidate.peer === peer)
+    if (session) {
+        processPathwardenPayload(session, rawPayload)
+        return
+    }
+    if (openingPeers.has(peer)) {
+        const queued = pendingMessages.get(peer) ?? []
+        if (queued.length < 32) queued.push(rawPayload)
+        pendingMessages.set(peer, queued)
+        recordPathwardenServerDebug('packet.queued_before_session', {
+            direction: 'in',
+            ...pathwardenPacketMetadata(rawPayload)
+        })
+        return
+    }
+    recordPathwardenServerDebug('packet.dropped_no_session', {
+        direction: 'in',
+        ...pathwardenPacketMetadata(rawPayload)
+    })
+}
+
 export function closePathwardenSession(peer: Peer) {
+    openingPeers.delete(peer)
+    pendingMessages.delete(peer)
     for (const [runId, session] of sessions) {
         if (session.peer === peer) {
             recordPathwardenServerDebug('socket.close', { runId, reason: 'peer closed' })

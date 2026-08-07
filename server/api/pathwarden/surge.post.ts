@@ -3,7 +3,7 @@ import { db } from '#server/database'
 import { pathwardenState } from '#server/database/schema'
 import { requireUserId } from '#server/utils/auth'
 import { debitGems } from '#server/utils/balance'
-import { getLockedPathwardenState } from '#server/utils/pathwarden'
+import { getLockedPathwardenState, reconcileOrphanedPathwardenRun } from '#server/utils/pathwarden'
 import { PATHWARDEN_SURGE_COST_GEMS } from '#shared/utils/gamelogic/pathwarden'
 
 export default defineEventHandler(async (event) => {
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
     }
     const cost = count * PATHWARDEN_SURGE_COST_GEMS
     return db.transaction(async (tx) => {
-        const state = await getLockedPathwardenState(tx, userId)
+        const state = await reconcileOrphanedPathwardenRun(tx, userId, await getLockedPathwardenState(tx, userId))
         const gems = debugMode ? null : await debitGems(userId, cost, tx)
         const [updated] = await tx.update(pathwardenState)
             .set({ surgeCharges: sql`${pathwardenState.surgeCharges} + ${count}` })

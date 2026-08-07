@@ -42,7 +42,11 @@ const MAX_QUERY_LIMIT = 500
 
 export function pathwardenPacketMetadata(value: ArrayBufferLike | Uint8Array) {
     const bytes = value instanceof Uint8Array ? value : new Uint8Array(value)
-    const metadata: Record<string, unknown> = { byteLength: bytes.byteLength }
+    const metadata: Record<string, unknown> = {
+        byteLength: bytes.byteLength,
+        firstByte: bytes[0],
+        hexPrefix: Array.from(bytes.slice(0, 16), byte => byte.toString(16).padStart(2, '0')).join(' ')
+    }
     if (bytes.byteLength < 20) return metadata
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     const kind = view.getUint8(2)
@@ -66,9 +70,9 @@ export function pathwardenPacketMetadata(value: ArrayBufferLike | Uint8Array) {
         ...metadata,
         packetKind: names[kind] ?? `Unknown(${kind})`,
         packetKindCode: kind,
-        packetSequence: view.getUint32(6),
-        tick: view.getUint32(10),
-        acknowledgedInput: view.getUint32(14)
+        packetSequence: view.getUint32(6, true),
+        tick: view.getUint32(10, true),
+        acknowledgedInput: view.getUint32(14, true)
     }
 }
 

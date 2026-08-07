@@ -3,6 +3,7 @@ import { db } from '#server/database'
 import { pathwardenState } from '#server/database/schema'
 import { requireUserId } from '#server/utils/auth'
 import { debit, debitGems } from '#server/utils/balance'
+import { getLockedPathwardenState, reconcileOrphanedPathwardenRun } from '#server/utils/pathwarden'
 import {
     PATHWARDEN_BOOST_IDS,
     PATHWARDEN_BOOSTS,
@@ -31,21 +32,17 @@ export default defineEventHandler(async (event) => {
     }
 
     return db.transaction(async (tx) => {
-        await tx.insert(pathwardenState).values({ userId }).onConflictDoNothing()
-        const [state] = await tx.select()
-            .from(pathwardenState)
-            .where(eq(pathwardenState.userId, userId))
-            .for('update')
-        if (!state) throw createError({ statusCode: 500, statusMessage: 'Could not initialize Pathwarden boosts' })
-        if (state.runStartedAt) {
+        const state = await getLockedPathwardenState(tx, userId)
+        const reconciledState = await reconcileOrphanedPathwardenRun(tx, userId, state)
+        if (reconciledState.runStartedAt) {
             throw createError({ statusCode: 400, statusMessage: 'Permanent boosts can only change between marches' })
         }
         const column = LEVEL_COLUMN[boostId]
-        const level = state[column]
+        const level = reconciledState[column]
         const cost = pathwardenBoostCost(boostId, level)
         if (cost === null) throw createError({ statusCode: 400, statusMessage: 'Boost is already maxed' })
 
-        const useFreeCredit = state.freeBoostCredits > 0
+        const useFreeCredit = reconciledState.freeBoostCredits > 0
         if (!debugMode && !useFreeCredit && PATHWARDEN_BOOSTS[boostId].currency === 'gems') {
             await debitGems(userId, cost, tx)
         } else if (!debugMode && !useFreeCredit) {
@@ -54,7 +51,7 @@ export default defineEventHandler(async (event) => {
         const [updated] = await tx.update(pathwardenState)
             .set({
                 [column]: level + 1,
-                freeBoostCredits: useFreeCredit ? state.freeBoostCredits - 1 : state.freeBoostCredits
+                freeBoostCredits: useFreeCredit ? reconciledState.freeBoostCredits - 1 : reconciledState.freeBoostCredits
             })
             .where(and(
                 eq(pathwardenState.userId, userId),

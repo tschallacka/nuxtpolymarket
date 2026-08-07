@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import type { DbExecutor } from '#server/database'
-import { pathwardenState } from '#server/database/schema'
+import { pathwardenRuns, pathwardenState } from '#server/database/schema'
 import {
     PATHWARDEN_CHECKPOINT_WAVES,
     PATHWARDEN_MAX_WAVE,
@@ -67,6 +67,37 @@ export async function getLockedPathwardenState(tx: DbExecutor, userId: string) {
         throw createError({ statusCode: 500, statusMessage: 'Could not initialize Pathwarden state' })
     }
     return state
+}
+
+export async function reconcileOrphanedPathwardenRun(
+    tx: DbExecutor,
+    userId: string,
+    state: LockedPathwardenState
+) {
+    if (!state.runStartedAt) return state
+
+    const [run] = await tx.select({ id: pathwardenRuns.id })
+        .from(pathwardenRuns)
+        .where(eq(pathwardenRuns.userId, userId))
+        .limit(1)
+    if (run) return state
+
+    await tx.update(pathwardenState)
+        .set({
+            runStartedAt: null,
+            runRealmSnapshot: null,
+            runPowerSnapshot: null,
+            runSurgedSnapshot: null
+        })
+        .where(eq(pathwardenState.userId, userId))
+
+    return {
+        ...state,
+        runStartedAt: null,
+        runRealmSnapshot: null,
+        runPowerSnapshot: null,
+        runSurgedSnapshot: null
+    }
 }
 
 export type PathwardenFinishReason = 'cashout' | 'victory' | 'defeat'

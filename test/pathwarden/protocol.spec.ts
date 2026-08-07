@@ -35,6 +35,7 @@ describe('Pathwarden binary gameplay protocol', () => {
             globalRelics: [{ family: 'heart', level: 1, power: 1 }],
             paused: false,
             entityCount: 42,
+            towerCosts: { bolt: 55, mortar: 80 },
             claimedRoomIds: ['castle'],
             revealedCells: [{ col: 4, row: 8 }]
         }, { sequence: 9, acknowledgedInput: 8 })
@@ -59,6 +60,7 @@ describe('Pathwarden binary gameplay protocol', () => {
             globalRelics: [{ family: 'heart', level: 1, power: 1 }],
             paused: false,
             entityCount: 42,
+            towerCosts: { bolt: 55, mortar: 80 },
             claimedRoomIds: ['castle'],
             revealedCells: [{ col: 4, row: 8 }]
         })

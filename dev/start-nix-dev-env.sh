@@ -84,4 +84,4 @@ else
     echo "Database already contains $user_count user(s); skipping seed."
 fi
 
-exec bun --bun nuxt dev --host 127.0.0.1
+exec bunx nuxt dev --host 127.0.0.1

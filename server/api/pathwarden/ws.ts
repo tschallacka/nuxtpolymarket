@@ -1,4 +1,5 @@
 import { closePathwardenSession, handlePathwardenMessage, openPathwardenSession } from '#server/pathwarden/session'
+import { recordPathwardenServerDebug } from '#server/pathwarden/debug-log'
 
 export default defineWebSocketHandler({
     async upgrade(request) {
@@ -14,14 +15,23 @@ export default defineWebSocketHandler({
         // Do not make the websocket handshake wait for database/world setup.
         // Nitro's dev adapter can otherwise leave the browser permanently in
         // CONNECTING while the async open hook is still resolving.
-        void openPathwardenSession(peer).catch(() => {
+        void openPathwardenSession(peer).catch(error => {
+            recordPathwardenServerDebug('socket.open_error', {
+                peerId: peer.id,
+                error: error instanceof Error ? error.message : String(error)
+            })
             peer.close(4401, 'Unauthorized Pathwarden session')
         })
     },
     message(peer, message) {
+        recordPathwardenServerDebug('websocket.message_hook', {
+            peerId: peer.id,
+            byteLength: message.uint8Array().byteLength
+        })
         handlePathwardenMessage(peer, message)
     },
     close(peer) {
+        recordPathwardenServerDebug('websocket.close_hook', { peerId: peer.id })
         closePathwardenSession(peer)
     },
     error(peer) {
