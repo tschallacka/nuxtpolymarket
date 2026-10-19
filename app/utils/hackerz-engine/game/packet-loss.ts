@@ -32,6 +32,11 @@ export class PacketLoss {
     /**
      * Where a unit appears to be: normally where it is, but during a
      * packet-loss spike where its frozen picture still stands.
+     *
+     * Known leak: the picture is the drawn rig, which carries a blasted unit's
+     * cosmetic glitch jitter (`Math.random`, see `placeEnemy`). So during a
+     * spike the turrets aim, by a little, at cosmetic randomness: a new
+     * particle or glitch roll can change how a PACKET LOSS round plays.
      */
     seenAt(enemy: EnemyEntity) {
         if (this.boardLagMs <= 0) return { u: enemy.u, d: enemy.d }
