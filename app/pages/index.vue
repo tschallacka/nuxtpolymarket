@@ -222,6 +222,14 @@ const arcadeGames = [
     to: '/dead-front',
     gradient: 'from-stone-950 via-red-950 to-zinc-950',
     iconColor: 'text-red-300'
+  },
+  {
+    name: 'Skyfarm',
+    description: 'A floating island in the void: build a cobblestone generator, automate your farms and sell everything, even while you are away',
+    icon: 'i-lucide-sprout',
+    to: '/skyfarm',
+    gradient: 'from-sky-950 via-emerald-950 to-slate-950',
+    iconColor: 'text-emerald-300'
   }
 ]
 

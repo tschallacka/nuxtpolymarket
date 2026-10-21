@@ -546,6 +546,14 @@ const rawGroups: CommandPaletteGroup[] = [
         icon: 'i-lucide-crosshair',
         to: '/dead-front',
         keywords: ['dead front', 'zombies', 'fps', 'co-op', 'multiplayer', 'rounds', 'pack-a-punch', 'perks', 'wonder weapon', 'ww1']
+      },
+      {
+        id: 'skyfarm',
+        label: 'Skyfarm',
+        description: 'Skyblock-style voxel idle farming with cobblestone generators and a shop',
+        icon: 'i-lucide-sprout',
+        to: '/skyfarm',
+        keywords: ['skyfarm', 'skyblock', 'minecraft', 'voxel', 'idle', 'farm', 'cobblestone', 'generator', 'redstone']
       }
     ]
   },

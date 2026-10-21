@@ -1,0 +1,15 @@
+Skyfarm block textures and models
+
+Derived from Pixel Perfection by XSSheep (https://www.minecraftforum.net/members/XSSheep),
+continued as Pixel Perfection Legacy by Nova_Wostra (https://modrinth.com/resourcepack/pixel-perfection-legacy).
+
+Licensed under the Creative Commons Attribution-ShareAlike 4.0 International License:
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Changes: a subset of the pack's block textures and models, re-packed into one JSON
+file; some models (chest, hopper, lever, button, repeater, pistons, observer, cactus,
+farmland, redstone dust) are simple shapes of our own using the pack's textures.
+
+Sounds (sounds/): copied as they ship in the same pack. The pack does not say who
+made them, and they appear to be classic Minecraft sounds rather than the pack
+authors' own work, so the license above may not cover them.
