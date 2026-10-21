@@ -1,11 +1,12 @@
 import { relations, sql } from 'drizzle-orm'
-import { pgTable, text, timestamp, boolean, index, uniqueIndex, numeric, integer, unique, jsonb, bigint, doublePrecision } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, index, uniqueIndex, numeric, integer, unique, jsonb, bigint, doublePrecision, customType, primaryKey } from 'drizzle-orm/pg-core'
 import type {
   PathwardenGameState,
   PathwardenMapPlan
 } from '#shared/types/pathwarden-save'
 import type { FirewallRunSave } from '#shared/utils/gamelogic/firewall'
 import type { HackerzRunSave } from '#shared/utils/gamelogic/hackerz'
+import type { SkyfarmSave } from '#shared/utils/skyfarm/save'
 import type { GmOffer, GmShopItem } from '#shared/utils/gamelogic/gold-miner'
 import type { CallOfXenoRunSave } from '#shared/utils/gamelogic/call-of-xeno-save'
 import type { MeadowbrawlRunSave } from '#shared/utils/gamelogic/meadowbrawl-meta'
@@ -29,6 +30,13 @@ import type { HqAwayReport } from '#shared/utils/hero-quest/away-report'
 import type { ArenaDefenseLoadout } from '#shared/utils/hero-quest/arena'
 import type { NcDrawing } from '#shared/utils/neighcasso/types'
 import type { NavLayout } from '#shared/utils/nav-layout'
+
+/** Raw bytes (Postgres bytea): binary game data, read and written as Uint8Array. */
+const bytea = customType<{ data: Uint8Array, driverData: Buffer }>({
+  dataType: () => 'bytea',
+  toDriver: v => Buffer.from(v.buffer, v.byteOffset, v.byteLength),
+  fromDriver: v => new Uint8Array(v)
+})
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -587,6 +595,94 @@ export const hackerzRuns = pgTable('hackerz_runs', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new Date()).notNull()
 })
+
+// ─── SKYFARM ─────────────────────────────────────────────────────────────
+
+// One floating island per player. `savedAt` is the server's clock at the last
+// save: the offline catch-up measures time away from it, never from the
+// client. Saves compare-and-swap on the integer `revision`.
+export const skyfarmIslands = pgTable('skyfarm_islands', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().unique().references(() => user.id, { onDelete: 'cascade' }),
+  revision: integer('revision').notNull().default(0),
+  saveVersion: integer('save_version').notNull(),
+  // The older JSON save; null once the island is saved in binary.
+  island: jsonb('island').$type<SkyfarmSave>(),
+  // The map file, gzipped (shared/utils/skyfarm/binary.ts): the island's state and the index of its columns.
+  map: bytea('map'),
+  // What the island takes, gzipped: the map and all its columns.
+  bytes: integer('bytes').notNull().default(0),
+  // The production check (app/utils/skyfarm/verify.ts): what the island was last
+  // verified to hold, by item; the most it can produce a second, by item, as last
+  // measured; and what it was measured for ("<builds>:<ore level>": measured again
+  // only when the island was built on or upgraded since).
+  trusted: jsonb('trusted').$type<Record<string, number>>(),
+  rates: jsonb('rates').$type<Record<string, number>>(),
+  ratesFor: text('rates_for'),
+  // What was paid for in site coins, kept here (a save can't claim more): cubes
+  // bought beyond the starter one, and the generator's ore level. Null: not yet
+  // counted (an island from before; its first save fills them in).
+  bought: integer('bought'),
+  ore: integer('ore'),
+  savedAt: timestamp('saved_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+})
+
+/** A Skyfarm player's storage: what their store depots sent in and the server accepted, by item. */
+export const skyfarmStorage = pgTable('skyfarm_storage', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  item: text('item').notNull(),
+  amount: bigint('amount', { mode: 'number' }).notNull().default(0)
+}, t => [primaryKey({ columns: [t.userId, t.item] })])
+
+/** The Skyfarm market: a limit order book per item, as Polytown's. Buys escrow site coins, sells escrow stored items. */
+export const skyfarmOrders = pgTable('skyfarm_orders', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  item: text('item').notNull(),
+  side: text('side').notNull(), // 'buy' | 'sell'
+  price: numeric('price', { precision: 19, scale: 4 }).notNull(),
+  quantity: integer('quantity').notNull(),
+  filled: integer('filled').notNull().default(0),
+  status: text('status').notNull().default('open'), // 'open' | 'filled' | 'cancelled'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new Date()).notNull()
+}, t => [
+  index('skyfarm_orders_book_idx').on(t.item, t.status, t.side, t.price),
+  index('skyfarm_orders_user_idx').on(t.userId, t.status)
+])
+
+/** One row per executed match on the Skyfarm market (players only; sales to the system are not trades). */
+export const skyfarmTrades = pgTable('skyfarm_trades', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  item: text('item').notNull(),
+  buyerId: text('buyer_id').references(() => user.id, { onDelete: 'set null' }),
+  sellerId: text('seller_id').references(() => user.id, { onDelete: 'set null' }),
+  price: numeric('price', { precision: 19, scale: 4 }).notNull(),
+  quantity: integer('quantity').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+}, t => [
+  index('skyfarm_trades_item_createdAt_idx').on(t.item, t.createdAt),
+  index('skyfarm_trades_buyer_idx').on(t.buyerId),
+  index('skyfarm_trades_seller_idx').on(t.sellerId)
+])
+
+/**
+ * One 16x16x64 column of a Skyfarm island per row: its column file, gzipped
+ * (blocks, meta and the containers standing in it), and the SHA-256 of the
+ * file before gzip, which the island's map names it by. Saved in the same
+ * transaction as the map, so the two always agree.
+ */
+export const skyfarmColumns = pgTable('skyfarm_columns', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  cx: integer('cx').notNull(),
+  cz: integer('cz').notNull(),
+  hash: text('hash').notNull(),
+  data: bytea('data').notNull()
+}, table => [
+  primaryKey({ columns: [table.userId, table.cx, table.cz] }),
+  index('skyfarm_columns_user_hash_idx').on(table.userId, table.hash)
+])
 
 // ─── GOLD MINER ──────────────────────────────────────────────────────────
 
@@ -2328,6 +2424,10 @@ export const hackerzStateRelations = relations(hackerzState, ({ one }) => ({
 
 export const hackerzRunsRelations = relations(hackerzRuns, ({ one }) => ({
   user: one(user, { fields: [hackerzRuns.userId], references: [user.id] })
+}))
+
+export const skyfarmIslandsRelations = relations(skyfarmIslands, ({ one }) => ({
+  user: one(user, { fields: [skyfarmIslands.userId], references: [user.id] })
 }))
 
 export const goldMinerStateRelations = relations(goldMinerState, ({ one }) => ({
