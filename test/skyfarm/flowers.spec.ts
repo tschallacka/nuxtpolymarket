@@ -189,15 +189,17 @@ describe('flowers', () => {
     it('tall grass is no item, and drops a seed now and then from its lower half only', () => {
         expect(item('tall_grass').places).toBeUndefined()
         expect(itemId('tall_grass')).toBe(0)
+        // One meadow, grown and broken 400 times (a new island each time is slow enough to time out under load).
+        const island = meadow()
         let seeds = 0
         for (let i = 0; i < 400; i++) {
-            const island = meadow()
             island.world.set(4, 12, 4, B.DoubleTallGrass, UPPER)
             island.world.set(4, 11, 4, B.DoubleTallGrass, 0)
             seeds += island.breakBlock(4, 12, 4, null, false).filter(s => s.item === 'wheat_seeds').length
             settle(island)
-            seeds += island.inventory.count('wheat_seeds')
         }
+        // Anything the upper half dropped on its own would land here.
+        seeds += island.inventory.count('wheat_seeds')
         expect(seeds).toBeGreaterThan(20)
         expect(seeds).toBeLessThan(90)
     })
