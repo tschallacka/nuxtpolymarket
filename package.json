@@ -13,7 +13,9 @@
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
     "typecheck": "NODE_ENV=production nuxt prepare && bun check --no-script -b -p tsconfig.check.json && vue-tsc -p .nuxt/tsconfig.app.json --noEmit",
-    "test": "bun --bun vitest run"
+    "test": "bun --bun vitest run",
+    "rail-tycoon:sprites": "bun scripts/rail-tycoon/extract-opengfx.ts",
+    "e2e:rail-tycoon": "bun e2e/rail-tycoon/run.ts"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.98",
@@ -39,10 +41,13 @@
     "@elevenlabs/elevenlabs-js": "^2.59.0",
     "@nuxt/eslint": "^1.15.2",
     "@types/pg": "^8.18.0",
+    "@types/pngjs": "^6.0.5",
     "@types/three": "^0.185.4",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.0.3",
     "openai": "^6.49.0",
+    "playwright-core": "^1.64.1",
+    "pngjs": "^7.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.9",
