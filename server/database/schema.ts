@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm'
-import { pgTable, text, timestamp, boolean, index, uniqueIndex, numeric, integer, unique, jsonb, bigint, doublePrecision } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, index, uniqueIndex, numeric, integer, unique, jsonb, bigint, doublePrecision, customType, primaryKey } from 'drizzle-orm/pg-core'
 import type {
   PathwardenGameState,
   PathwardenMapPlan
@@ -2686,3 +2686,45 @@ export const deadFrontProfile = pgTable('dead_front_profile', {
   eggsCompleted: integer('eggs_completed').notNull().default(0),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 })
+
+// ─── Rail Tycoon ──────────────────────────────────────────────────────────────
+
+/** Rail Tycoon's own bytea column type; no other game uses it, so removing either cannot break the other. */
+const railTycoonBytea = customType<{ data: Buffer, driverData: Buffer }>({
+  dataType() {
+    return 'bytea'
+  }
+})
+
+/**
+ * One shared multiplayer world. `save` is the gzipped binary world; a checkpoint
+ * locks the row, checks `revision` and writes revision + 1 (never CAS on a timestamp).
+ * Timestamps are server clock only.
+ */
+export const railTycoonWorlds = pgTable('rail_tycoon_worlds', {
+  id: text('id').primaryKey(),
+  ownerId: text('owner_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  status: text('status').$type<'open' | 'closed'>().notNull().default('open'),
+  inviteCode: text('invite_code').notNull().unique(),
+  side: integer('side'),
+  maxCompanies: integer('max_companies'),
+  revision: integer('revision').notNull().default(0),
+  save: railTycoonBytea('save').notNull(),
+  bytes: integer('bytes'),
+  tick: integer('tick'),
+  savedAt: timestamp('saved_at').notNull(),
+  lastActiveAt: timestamp('last_active_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow()
+}, t => [index('rail_tycoon_worlds_ownerId_idx').on(t.ownerId)])
+
+/** Which players belong to which world, and the company each one runs there. */
+export const railTycoonMembers = pgTable('rail_tycoon_members', {
+  worldId: text('world_id').notNull().references(() => railTycoonWorlds.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  companyId: integer('company_id').notNull(),
+  joinedAt: timestamp('joined_at').defaultNow()
+}, t => [
+  primaryKey({ columns: [t.worldId, t.userId] }),
+  uniqueIndex('rail_tycoon_members_world_company_idx').on(t.worldId, t.companyId)
+])
